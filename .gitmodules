@@ -1,0 +1,6 @@
+[submodule "upstream/EhPanda"]
+	path = upstream/EhPanda
+	url = https://github.com/EhPanda-Team/EhPanda.git
+[submodule "upstream/Pixiv-SwiftUI"]
+	path = upstream/Pixiv-SwiftUI
+	url = https://github.com/Eslzzyl/Pixiv-SwiftUI.git

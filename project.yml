@@ -1,0 +1,123 @@
+# XcodeGen 工程描述。Xcode 工程不入库，每次构建前由 `xcodegen generate` 生成。
+#
+# 整体结构：
+#   - Hub（App target）= 宿主壳（App/）+ Pixiv-SwiftUI 的全部源码和资源
+#     Pixiv-SwiftUI 上游是单一 App target，它的图片、文案、标签数据都从主 bundle 里找，
+#     所以直接编进 App target，资源查找和上游完全一样。
+#   - EhPanda 上游已经拆成本地 Swift 包，这里只链接它的 AppFeature 产品，命名空间天然隔离。
+#
+# 生成工程前必须先运行 `python3 scripts/prepare.py all`（打补丁、注入桥接文件、准备 tags.json）。
+
+name: Hub
+
+options:
+  minimumXcodeGenVersion: 2.40.0
+  deploymentTarget:
+    # EhPanda 3.0.0 的最低系统要求。
+    iOS: "27.0"
+  # 与 Pixiv-SwiftUI 的字符串目录源语言一致。
+  developmentLanguage: zh-Hans
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+  configs:
+    Release:
+      # 不生成 dSYM，缩短云端构建时间。
+      DEBUG_INFORMATION_FORMAT: dwarf
+      DEPLOYMENT_POSTPROCESSING: YES
+
+packages:
+  AppPackage:
+    path: upstream/EhPanda/AppPackage
+  # 以下是 Pixiv-SwiftUI 的依赖。Kingfisher 和 Kanna 两边都用，地址和版本下限取 EhPanda 的写法，
+  # 这样整个工程里每个包只会解析出一个版本。
+  Kingfisher:
+    url: https://github.com/onevcat/Kingfisher
+    from: 8.13.0
+  Kanna:
+    url: https://github.com/tid-kijyun/Kanna
+    from: 6.1.0
+  GzipSwift:
+    url: https://github.com/1024jp/GzipSwift
+    from: 7.0.0
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: 0.9.20
+
+targets:
+  Hub:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: upstream/Pixiv-SwiftUI/Pixiv-SwiftUI
+        excludes:
+          # 上游自己的图标和 macOS 沙盒权限文件，宿主用不到。
+          - "AppIcon.icon"
+          - "AppIcon.icon/**"
+          - "*.entitlements"
+      # Pixiv 的标签翻译数据，由 scripts/prepare.py 生成。
+      - path: generated/tags.json
+        buildPhase: resources
+      # EhPanda 设置里「更换图标」用到的图标文件，它按文件名从主 bundle 里找。
+      - path: upstream/EhPanda/App/Icons
+        buildPhase: resources
+    dependencies:
+      - package: AppPackage
+        product: AppFeature
+      - package: Kingfisher
+        product: Kingfisher
+      - package: Kanna
+        product: Kanna
+      - package: GzipSwift
+        product: Gzip
+      - package: ZIPFoundation
+        product: ZIPFoundation
+    settings:
+      base:
+        PRODUCT_NAME: Hub
+        PRODUCT_MODULE_NAME: Hub
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hubapp.Hub
+        # 主屏幕上显示的名字。
+        HUB_DISPLAY_NAME: Hub
+        INFOPLIST_FILE: Config/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        # 版本号用日期。两个子应用都会拿主 bundle 的版本号和自己上游的最新版本比较，
+        # 日期形式的版本号永远更大，它们就不会弹出「有新版本」的提示。云端构建时会改成当天日期。
+        MARKETING_VERSION: "2026.11.14"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: HubIcon
+        # 全局强调色沿用 Pixiv 资源目录里的 AccentColor，它的界面因此和上游完全一致；
+        # EhPanda 的强调色由宿主在它的根视图上单独指定。
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+        # 以下几项照搬 Pixiv-SwiftUI 上游工程的设置：它的源码是按这套编译选项写的。
+        SWIFT_VERSION: "6.0"
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        STRING_CATALOG_GENERATE_SYMBOLS: YES
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+        ENABLE_APP_INTENTS_METADATA: NO
+        ENABLE_PREVIEWS: YES
+      configs:
+        Release:
+          SWIFT_COMPILATION_MODE: wholemodule
+
+schemes:
+  Hub:
+    build:
+      targets:
+        Hub: all
+    run:
+      config: Debug
+    archive:
+      config: Release

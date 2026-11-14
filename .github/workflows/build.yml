@@ -1,0 +1,106 @@
+name: 构建 IPA
+
+# 推送到 main 时自动构建，也可以在 Actions 页面手动运行。
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+
+permissions:
+  contents: read
+
+# 同一个分支上有新的构建开始时，取消还没跑完的旧构建。
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 编译并打包
+    # GitHub 官方托管的 Xcode 27 运行器（macOS 27，arm64）。两个上游项目自己的发版流程用的也是它。
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: 检出代码和上游子模块
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: 显示工具链版本
+        run: |
+          xcodebuild -version
+          swift --version
+          python3 --version
+
+      - name: 安装 XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            if command -v brew >/dev/null 2>&1 && brew install xcodegen; then
+              echo "已通过 Homebrew 安装"
+            else
+              # 运行器上没有 Homebrew 时，直接用官方发行包里的可执行文件。
+              curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
+                https://github.com/yonaskolb/XcodeGen/releases/latest/download/xcodegen.zip
+              unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP/xcodegen-dist"
+              echo "$RUNNER_TEMP/xcodegen-dist/xcodegen/bin" >> "$GITHUB_PATH"
+              export PATH="$RUNNER_TEMP/xcodegen-dist/xcodegen/bin:$PATH"
+            fi
+          fi
+          xcodegen --version
+
+      - name: 准备上游源码（补丁、桥接文件、标签数据）
+        run: python3 -I scripts/prepare.py all --tags auto
+
+      - name: 生成 Xcode 工程
+        run: |
+          xcodegen generate
+          python3 -I scripts/prepare.py resolved --project Hub.xcodeproj
+
+      - name: 确认 iOS 平台可用
+        run: |
+          if xcrun simctl list runtimes 2>/dev/null | grep -q "iOS"; then
+            echo "iOS 平台已安装"
+          else
+            # 编译资源目录需要 iOS 平台组件；镜像里没有预装时下载，网络不稳所以重试几次。
+            for attempt in 1 2 3 4 5; do
+              if xcodebuild -downloadPlatform iOS; then
+                break
+              fi
+              echo "第 ${attempt} 次下载失败，20 秒后重试"
+              sleep 20
+            done
+            xcrun simctl list runtimes
+          fi
+
+      - name: 缓存 Swift 包
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/DerivedData/SourcePackages
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('upstream/versions.json', 'project.yml') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: 编译并打包 IPA
+        run: bash scripts/build_ipa.sh
+
+      - name: 上传 IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: Hub-ipa
+          path: build/Hub.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 上传完整构建日志
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log
+          path: build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
