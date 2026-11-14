@@ -133,21 +133,42 @@ BUNDLE_ID="$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "${APP}/Info.p
 
 echo "打包完成：${IPA}（${SIZE_MB} MB，最低系统 ${MIN_OS}，包名 ${BUNDLE_ID}）"
 
-# EhPanda 的分类颜色编译在 Assets.car 里，从文件清单上看不出来，单独数一下。
-# 上游一共 22 个（E-Hentai 和 ExHentai 各 11 个分类）；少了的话列表里的分类标签会没有底色。
-CATEGORY_COLORS="$(xcrun assetutil --info "${APP}/Assets.car" 2>/dev/null \
-    | grep -oE '"Name" : "(E-Hentai|ExHentai)/[^"]+"' | sort -u | wc -l | tr -d ' ' || true)"
+# 命名颜色编译在 Assets.car 里，从文件清单上看不出来，用 assetutil 列出来。
+# assetutil 输出的是 JSON（名字里的斜杠会转义成 \/），所以交给 JSON 解析，不用文本匹配。
+ASSET_INFO="build/assets-info.json"
+xcrun assetutil --info "${APP}/Assets.car" > "$ASSET_INFO" 2>/dev/null || true
+COLOR_NAMES="$(python3 -I - "$ASSET_INFO" <<'PY' || true
+import json, sys
+
+try:
+    entries = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    entries = []
+names = {e.get("Name", "") for e in entries if isinstance(e, dict) and e.get("AssetType") == "Color"}
+print("\n".join(sorted(name for name in names if name)))
+PY
+)"
+
+# EhPanda 的分类颜色，上游一共 22 个（E-Hentai 和 ExHentai 各 11 个分类）；
+# 少了的话列表里的分类标签会没有底色。
+CATEGORY_COLORS="$(printf '%s\n' "$COLOR_NAMES" | grep -cE '^(E-Hentai|ExHentai)/' || true)"
 CATEGORY_COLORS="${CATEGORY_COLORS:-0}"
 echo "  资源目录里的 EhPanda 分类颜色：${CATEGORY_COLORS} 个"
 if [ "$CATEGORY_COLORS" -ne 22 ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
     echo "::warning::资源目录里的 EhPanda 分类颜色是 ${CATEGORY_COLORS} 个，应为 22 个"
 fi
 
+# 实际参与编译的资源目录，从编译日志里找。
+CATALOGS="$(grep -oE '[^ /"]+\.xcassets' "$LOG" | sort -u | tr '\n' ' ' || true)"
+
 # 包内容清单：不下载安装包也能核对里面有什么。
 CONTENTS="build/contents.txt"
 {
     echo "可执行文件：$(du -h "${APP}/${SCHEME}" | cut -f1)"
+    echo "参与编译的资源目录：${CATALOGS}"
     echo "EhPanda 分类颜色：${CATEGORY_COLORS} 个（应为 22 个）"
+    echo "资源目录里的全部命名颜色："
+    printf '%s\n' "$COLOR_NAMES" | sed -e 's/^/    /'
     echo "资源包（.bundle）：$(find "$APP" -maxdepth 1 -name '*.bundle' | wc -l | tr -d ' ') 个"
     echo "语言目录（.lproj）：$(find "$APP" -maxdepth 1 -name '*.lproj' -exec basename {} .lproj \; | sort | tr '\n' ' ')"
     echo "内嵌框架：$(find "${APP}/Frameworks" -maxdepth 1 -mindepth 1 2>/dev/null | wc -l | tr -d ' ') 个"
