@@ -133,6 +133,21 @@ BUNDLE_ID="$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "${APP}/Info.p
 
 echo "打包完成：${IPA}（${SIZE_MB} MB，最低系统 ${MIN_OS}，包名 ${BUNDLE_ID}）"
 
+# 包内容清单：不下载安装包也能核对里面有什么。
+CONTENTS="build/contents.txt"
+{
+    echo "可执行文件：$(du -h "${APP}/${SCHEME}" | cut -f1)"
+    echo "资源包（.bundle）：$(find "$APP" -maxdepth 1 -name '*.bundle' | wc -l | tr -d ' ') 个"
+    echo "语言目录（.lproj）：$(find "$APP" -maxdepth 1 -name '*.lproj' -exec basename {} .lproj \; | sort | tr '\n' ' ')"
+    echo "内嵌框架：$(find "${APP}/Frameworks" -maxdepth 1 -mindepth 1 2>/dev/null | wc -l | tr -d ' ') 个"
+    echo
+    echo "顶层文件："
+    ls -1 "$APP"
+    echo
+    echo "Info.plist："
+    /usr/bin/plutil -p "${APP}/Info.plist"
+} > "$CONTENTS"
+
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {
         echo "### 构建成功"
@@ -143,5 +158,13 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         echo "| 大小 | ${SIZE_MB} MB |"
         echo "| 最低系统 | iOS ${MIN_OS} |"
         echo "| 包名 | ${BUNDLE_ID} |"
+        echo
+        echo "<details><summary>包内容清单</summary>"
+        echo
+        echo '```'
+        cat "$CONTENTS"
+        echo '```'
+        echo
+        echo "</details>"
     } >> "$GITHUB_STEP_SUMMARY"
 fi

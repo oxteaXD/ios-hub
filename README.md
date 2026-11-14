@@ -24,7 +24,12 @@
 3. 用你平时的签名工具签名并安装。
 
 也可以在 Actions 页面点 **Run workflow** 手动构建。构建失败时，运行页面的摘要里会直接列出报错行，
-完整日志在 `build-log` 里。
+完整日志在 `build-log` 里；构建成功时摘要里有一份包内容清单。
+
+每次构建还会并行跑一遍**模拟器冒烟测试**：在 iOS 模拟器里分别以启动页、EhPanda、Pixiv 三种方式启动，
+再模拟一次从 Pixiv 切到 EhPanda，确认都不崩溃。每种情况截一张图，放在 `smoke-test` 里；
+截图上的文字会被识别出来写进运行摘要，不下载截图也能看出界面显示了什么。
+这个测试只覆盖启动和切换，登录、浏览、下载这些要联网的功能测不到。
 
 ## 使用
 
@@ -48,7 +53,10 @@ Config/Info.plist       合并了各应用所需条目的 Info.plist
 bridges/                构建时复制进上游模块的桥接文件（只新增，不改上游文件）
 scripts/
   prepare.py              构建前准备：打补丁、注入桥接文件、准备标签数据、合并依赖锁定文件
+  ci_setup.sh             云端各作业共用的准备步骤：装 XcodeGen、跑 prepare.py、生成工程
   build_ipa.sh            编译并打包成未签名 IPA
+  smoke_test.sh           模拟器冒烟测试
+  ocr.swift               识别截图里的文字，供冒烟测试使用
   make_icon.py            生成宿主图标（想换图标时才用）
 upstream/               上游项目，git 子模块，保持原样
   versions.json           各上游固定的版本
