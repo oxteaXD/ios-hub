@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// 模块界面上的悬浮按钮：轻点回到启动页，长按直接切到别的模块，按住拖动可以挪位置。
+/// 模块界面上的悬浮按钮：轻点回到启动页，长按直接切到别的模块，按住可以上下拖动。
+///
+/// 它只停靠在屏幕右边缘。左边缘要留给系统的侧滑返回手势：按钮如果停在左边，
+/// 它所在高度的那一小段就没法从边缘右滑返回了。
 ///
 /// 它和模块界面在同一个视图层级里，所以模块弹出的面板和全屏页面会盖住它，
 /// 也就是说只有在模块没有弹出任何东西时才能切换，不会把弹到一半的界面留在后面。
 struct HubSwitcherBubble: View {
     let state: HubState
 
-    /// 停靠位置，用 0...1 的相对值保存，换屏幕尺寸或旋转后依然有效。
-    @AppStorage("hub.bubble.x") private var storedX = 1.0
+    /// 纵向停靠位置，用 0...1 的相对值保存，换屏幕尺寸或旋转后依然有效。
     @AppStorage("hub.bubble.y") private var storedY = 0.7
     @State private var dragTranslation: CGSize = .zero
     @State private var isDragging = false
@@ -31,12 +33,9 @@ struct HubSwitcherBubble: View {
                             dragTranslation = value.translation
                         }
                         .onEnded { value in
-                            let dropped = CGPoint(
-                                x: rest.x + value.translation.width,
-                                y: rest.y + value.translation.height
-                            )
+                            let droppedY = rest.y + value.translation.height
                             withAnimation(.snappy) {
-                                settle(at: dropped, in: area)
+                                settle(atY: droppedY, in: area)
                                 dragTranslation = .zero
                                 isDragging = false
                             }
@@ -87,22 +86,20 @@ struct HubSwitcherBubble: View {
             .accessibilityIdentifier("hub.switcher")
     }
 
+    /// 停靠位置：横向固定在右边缘，纵向取保存的相对位置。
     private func restingCenter(in area: CGSize) -> CGPoint {
-        let spanX = max(area.width - diameter - margin * 2, 0)
         let spanY = max(area.height - diameter - margin * 2, 0)
-        let unitX = CGFloat(min(max(storedX, 0), 1))
         let unitY = CGFloat(min(max(storedY, 0), 1))
         return CGPoint(
-            x: margin + diameter / 2 + spanX * unitX,
+            x: area.width - margin - diameter / 2,
             y: margin + diameter / 2 + spanY * unitY
         )
     }
 
-    /// 松手后吸附到左右两侧中较近的一边，纵向位置保留。
-    private func settle(at point: CGPoint, in area: CGSize) {
+    /// 松手后回到右边缘，只记下纵向位置。拖动过程中按钮可以跟着手指到任何地方。
+    private func settle(atY droppedY: CGFloat, in area: CGSize) {
         let spanY = max(area.height - diameter - margin * 2, 1)
-        let unitY = (point.y - margin - diameter / 2) / spanY
-        storedX = point.x < area.width / 2 ? 0 : 1
+        let unitY = (droppedY - margin - diameter / 2) / spanY
         storedY = Double(min(max(unitY, 0), 1))
     }
 }

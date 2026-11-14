@@ -89,13 +89,13 @@ jobs:
       - name: 在模拟器里跑界面测试
         run: bash scripts/smoke_test.sh
 
-      - name: 上传截图和测试结果
+      # 只上传整理过的测试结果。截图和完整日志不上传：测试会进入 EhPanda 的主页，
+      # 它们里面可能带有站点内容，而公开仓库的构建产物谁都能下载。
+      - name: 上传测试结果
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: smoke-test
-          path: |
-            build/smoke
-            build/xcodebuild-sim.log
+          path: build/smoke/result.txt
           if-no-files-found: ignore
           retention-days: 7

@@ -120,32 +120,82 @@ final class HubUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
     }
 
-    /// 按住悬浮按钮可以拖到屏幕另一侧，松手后吸附在那一侧。
+    /// 悬浮按钮可以上下拖动，但松手后总是回到右边缘：左边缘要留给侧滑返回。
     @MainActor
-    func testDraggingSwitcherMovesItToTheOtherSide() throws {
+    func testDraggingSwitcherKeepsItOnTheRightEdge() throws {
         let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "ehpanda"])
         app.launch()
 
         let switcher = element("hub.switcher", in: app)
         XCTAssertTrue(switcher.waitForExistence(timeout: 60), "没有直接进入上次使用的应用")
         settle(3)
+        report("直接进入 EhPanda", app)
 
-        // 之前的测试可能已经把它挪过位置，所以先看它现在在哪一侧，再往另一侧拖。
         let before = switcher.frame
-        let startsOnRight = before.midX > app.frame.midX
+        XCTAssertGreaterThan(before.midX, app.frame.midX, "悬浮按钮应该停在屏幕右侧")
+
+        // 往屏幕左侧拖，同时换一个高度：之前在下半屏就拖到上面，反之拖到下面。
+        let targetY: CGFloat = before.midY > app.frame.midY ? 0.25 : 0.75
         let start = switcher.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: startsOnRight ? 0.2 : 0.8, dy: 0.35))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: targetY))
         start.press(forDuration: 0.1, thenDragTo: end)
         settle(2)
 
         let after = switcher.frame
         print("HUBUI|拖动悬浮按钮|拖动前 \(describe(before))，拖动后 \(describe(after))，屏幕 \(describe(app.frame))")
-        if startsOnRight {
-            XCTAssertLessThan(after.midX, app.frame.midX, "往左拖之后，悬浮按钮应该吸附在左侧")
-        } else {
-            XCTAssertGreaterThan(after.midX, app.frame.midX, "往右拖之后，悬浮按钮应该吸附在右侧")
-        }
+        XCTAssertEqual(after.midX, before.midX, accuracy: 2, "拖到左侧松手后，悬浮按钮应该回到右边缘")
+        XCTAssertGreaterThan(abs(after.midY - before.midY), 100, "悬浮按钮的高度应该跟着拖动改变")
         XCTAssertEqual(switcher.value as? String, "EhPanda", "拖动不应该触发切换")
+    }
+
+    /// EhPanda 主页最底部有「AI 热门」入口，点进去是列表页，从屏幕左边缘右滑能返回。
+    ///
+    /// 这个测试会走过成年确认页进入主页。主页的内容不截图也不打印（见 `report`），
+    /// 这里只关心入口在不在、页面能不能打开、侧滑返回管不管用，这三件事都不依赖联网。
+    @MainActor
+    func testEhPandaAIPopularEntryAndEdgeSwipeBack() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "ehpanda"])
+        app.launch()
+
+        // 首次启动：勾选成年声明 → 继续 → 选统计级别 → 继续。之前的测试已经走过的话就跳过。
+        let declaration = element("first_launch_declaration", in: app)
+        let entry = element("home_ai_popular_entry", in: app)
+        XCTAssertTrue(
+            waitUntil(timeout: 60) { declaration.exists || entry.exists },
+            "进入 EhPanda 后既没有出现成年确认页，也没有出现主页"
+        )
+        if declaration.exists {
+            declaration.tap()
+            element("first_launch_continue", in: app).tap()
+            let level = element("first_launch_level_minimal", in: app)
+            XCTAssertTrue(level.waitForExistence(timeout: 30), "成年确认之后没有出现统计选项页")
+            level.tap()
+            element("first_launch_continue", in: app).tap()
+        }
+
+        // 主页：入口在最底部，往上滑到它能点到为止。
+        XCTAssertTrue(entry.waitForExistence(timeout: 60), "EhPanda 主页上没有「AI 热门」入口")
+        var swipes = 0
+        while !entry.isHittable, swipes < 8 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(entry.isHittable, "滑到主页底部后仍然点不到「AI 热门」入口")
+        entry.tap()
+
+        // 页面推入之后，主页不在界面层级里了，入口也就找不到了。
+        XCTAssertTrue(waitUntil(timeout: 30) { !entry.exists }, "点「AI 热门」入口后没有打开新页面")
+        let titleShown = waitUntil(timeout: 10) { app.navigationBars["AI 热门"].exists }
+        print("HUBUI|AI 热门入口|页面已打开，导航栏标题是「AI 热门」：\(titleShown ? "是" : "没有识别到")")
+
+        // 从屏幕左边缘向右滑，应当返回主页。
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 3, dy: 0))
+        let target = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        edge.press(forDuration: 0.05, thenDragTo: target)
+        XCTAssertTrue(entry.waitForExistence(timeout: 15), "从屏幕左边缘右滑之后没有返回主页")
+        print("HUBUI|AI 热门入口|从屏幕左边缘右滑：已返回主页")
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
     }
 
     /// Pixiv 在 iPhone 上只允许竖屏；启动页和 EhPanda 可以横屏。
@@ -219,8 +269,20 @@ final class HubUITests: XCTestCase {
 
     /// 截一张图存进测试结果，并把屏幕上的文字打印出来。
     /// 悬浮按钮在场时，还会报告它的位置，以及它有没有压在别的按钮上。
+    ///
+    /// EhPanda 过了成年确认页之后的界面是站点内容，不截图也不打印：
+    /// 这些测试结果会出现在公开仓库的构建记录里。
     @MainActor
     private func report(_ name: String, _ app: XCUIApplication) {
+        let switcher = element("hub.switcher", in: app)
+        let isInEhPanda = switcher.exists && (switcher.value as? String) == "EhPanda"
+        let isOnFirstLaunchPages = element("first_launch_age_wall_title", in: app).exists
+            || element("first_launch_analytics_title", in: app).exists
+        if isInEhPanda && !isOnFirstLaunchPages {
+            print("HUBUI|\(name)|（已经在 EhPanda 的内容页面里，不截图也不记录文字）")
+            return
+        }
+
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
         attachment.lifetime = .keepAlways

@@ -66,6 +66,10 @@ targets:
       # EhPanda 设置里「更换图标」用到的图标文件，它按文件名从主 bundle 里找。
       - path: upstream/EhPanda/App/Icons
         buildPhase: resources
+      # EhPanda 的分类颜色（列表里分类标签的底色），它按名字从主 bundle 的资源目录里找。
+      # 由 scripts/prepare.py 从上游壳工程的资源目录里抽出来，不带那里面的 AccentColor。
+      - path: generated/EhPandaAssets.xcassets
+        buildPhase: resources
     dependencies:
       - package: AppPackage
         product: AppFeature

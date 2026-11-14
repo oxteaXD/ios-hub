@@ -1,0 +1,229 @@
+diff --git a/AppPackage/Sources/AppModels/Persistent/Filter.swift b/AppPackage/Sources/AppModels/Persistent/Filter.swift
+index 4060702..6588629 100644
+--- a/AppPackage/Sources/AppModels/Persistent/Filter.swift
++++ b/AppPackage/Sources/AppModels/Persistent/Filter.swift
+@@ -10,8 +10,8 @@ public struct Filter: Codable, Equatable, Sendable, SchemaVersioned {
+         western: Bool = false,
+         nonH: Bool = false,
+         imageSet: Bool = false,
+-        cosplay: Bool = false,
+-        asianPorn: Bool = false,
++        cosplay: Bool = true,
++        asianPorn: Bool = true,
+         misc: Bool = false,
+         advanced: Bool = false,
+         onlyWithTorrents: Bool = false,
+@@ -69,8 +69,10 @@ public struct Filter: Codable, Equatable, Sendable, SchemaVersioned {
+     public var western = false
+     public var nonH = false
+     public var imageSet = false
+-    public var cosplay = false
+-    public var asianPorn = false
++    // [Hub] 默认不显示真人作品：Cosplay 和 Asian Porn 两个分类默认排除（这里的 true 表示排除）。
++    // 搜索、全局、关注三套筛选的初始值和「重置」都来自这里，所以它们一起生效。
++    public var cosplay = true
++    public var asianPorn = true
+     public var misc = false
+ 
+     public var advanced = false
+diff --git a/AppPackage/Sources/AppModels/Utilities/URLUtil.swift b/AppPackage/Sources/AppModels/Utilities/URLUtil.swift
+index e786670..416a245 100644
+--- a/AppPackage/Sources/AppModels/Utilities/URLUtil.swift
++++ b/AppPackage/Sources/AppModels/Utilities/URLUtil.swift
+@@ -16,8 +16,10 @@ public struct URLUtil {
+         host.url.appending(queryItems: [.fSearch: keyword, .next: lastID]).applyingFilter(filter)
+     }
+ 
++    // [Hub] 首页不显示 AI 作品。让站点在服务端排除 AI 标签，而不是拿到之后再筛：
++    // 这样每一页仍然是完整的一页，翻页也不受影响。
+     public static func frontPageList(host: GalleryHost, filter: Filter) -> URL {
+-        host.url.applyingFilter(filter)
++        host.url.appending(queryItems: [.fSearch: hubAIGeneratedExclusion]).applyingFilter(filter)
+     }
+ 
+     public static func moreFrontPageList(
+@@ -25,7 +27,7 @@ public struct URLUtil {
+         filter: Filter,
+         lastID: String
+     ) -> URL {
+-        host.url.appending(queryItems: [.next: lastID]).applyingFilter(filter)
++        host.url.appending(queryItems: [.fSearch: hubAIGeneratedExclusion, .next: lastID]).applyingFilter(filter)
+     }
+ 
+     public static func popularList(host: GalleryHost, filter: Filter) -> URL {
+diff --git a/AppPackage/Sources/HomeFeature/HomeClient.swift b/AppPackage/Sources/HomeFeature/HomeClient.swift
+index 5537ba4..126dda9 100644
+--- a/AppPackage/Sources/HomeFeature/HomeClient.swift
++++ b/AppPackage/Sources/HomeFeature/HomeClient.swift
+@@ -50,8 +50,9 @@ extension HomeClient {
+     public static let live = Self(
+         fetchPopularGalleries: { (host: GalleryHost, filter: AppModels.Filter) async throws(AppError) in
+             let galleries = try await PopularGalleriesRequest(host: host, filter: filter).response()
+-            var generator = SystemRandomNumberGenerator()
+-            return arrangedCarousel(galleries, using: &generator)
++            // [Hub] 顶部大卡片改为：剔除 AI 作品后，按热门列表本身的顺序取前几个，
++            // 不再从标题最长的里面随机挑。
++            return hubCarousel(galleries)
+         },
+         fetchFrontPageGalleries: { (host: GalleryHost, filter: AppModels.Filter) async throws(AppError) in
+             let response = try await FrontPageGalleriesRequest(host: host, filter: filter).response()
+diff --git a/AppPackage/Sources/HomeFeature/HomeReducer+Body.swift b/AppPackage/Sources/HomeFeature/HomeReducer+Body.swift
+index 060a76c..118297f 100644
+--- a/AppPackage/Sources/HomeFeature/HomeReducer+Body.swift
++++ b/AppPackage/Sources/HomeFeature/HomeReducer+Body.swift
+@@ -167,6 +167,16 @@ extension HomeReducer {
+                     )
+                 }
+ 
++            // [Hub] 「AI 热门」和热门页是同一个页面，只是只留 AI 作品；打开方式也和热门页一样。
++            case .hubAIPopularTapped:
++                if state.usesSplitLayout {
++                    return presentSheet(root: .popular(.init(hubShowsAIOnly: true)), on: .right, state: &state)
++                }
++                return presentationEffect(
++                    id: state.path.appendGuardingDuplicate(.popular(.init(hubShowsAIOnly: true))),
++                    action: .popular(.onPresented)
++                )
++
+             // A vote's answer goes to the detail's own copy of the comment, with no fetch of the whole detail.
+             case let .path(.element(
+                 id: _, action: .gallery(.comments(.delegate(.commentVoted(gid, commentID, score, vote))))
+@@ -283,7 +293,11 @@ extension HomeReducer {
+                         state.toplistsLoadingState[catIndex] = .failed(.notFound)
+                         return .none
+                     }
++                    // [Hub] 排行榜不显示 AI 作品，也不显示全局筛选里排除的分类。
++                    // 站点的排行榜接口不支持筛选，所以拿到之后在这里筛。
+                     state.toplistsGalleries[catIndex] = galleries
++                        .hubRemovingAIGenerated()
++                        .hubRemovingExcludedCategories(state.globalFilter)
+                     return .none
+                 case .failure(let error):
+                     state.toplistsLoadingState[catIndex] = .failed(error)
+diff --git a/AppPackage/Sources/HomeFeature/HomeReducer.swift b/AppPackage/Sources/HomeFeature/HomeReducer.swift
+index e633305..902779f 100644
+--- a/AppPackage/Sources/HomeFeature/HomeReducer.swift
++++ b/AppPackage/Sources/HomeFeature/HomeReducer.swift
+@@ -77,6 +77,8 @@ public struct HomeReducer: Sendable {
+         case pushGalleryDetail(Gallery)
+         case sectionTapped(HomeSectionType)
+         case miscTapped(HomeMiscGridType)
++        // [Hub] 主页最底部「AI 热门」入口被点击。
++        case hubAIPopularTapped
+         case path(StackActionOf<HomePath>)
+         case sheet(PresentationAction<HomeSheetFeature.Action>)
+         case sheetDismissed
+diff --git a/AppPackage/Sources/HomeFeature/HomeSectionsView.swift b/AppPackage/Sources/HomeFeature/HomeSectionsView.swift
+index a0a5c14..226d93b 100644
+--- a/AppPackage/Sources/HomeFeature/HomeSectionsView.swift
++++ b/AppPackage/Sources/HomeFeature/HomeSectionsView.swift
+@@ -23,6 +23,8 @@ struct HomeSectionsView: View {
+                 }
+                 if pane != .right {
+                     other.padding(.vertical)
++                    // [Hub] 主页最底部的「AI 热门」入口，定义在 HubAIPopular.swift。
++                    hubAIPopularEntry.padding(.bottom)
+                 }
+             }
+         }
+diff --git a/AppPackage/Sources/HomeFeature/Popular/PopularReducer.swift b/AppPackage/Sources/HomeFeature/Popular/PopularReducer.swift
+index eff1e70..8156d68 100644
+--- a/AppPackage/Sources/HomeFeature/Popular/PopularReducer.swift
++++ b/AppPackage/Sources/HomeFeature/Popular/PopularReducer.swift
+@@ -29,15 +29,27 @@ public struct PopularReducer: Sendable {
+         @SharedReader(.setting) public var setting: Setting
+         @Presents public var destination: Destination.State?
+         public var keyword = ""
++        // [Hub] 这个页面同时用作「AI 热门」：两者取的是同一份热门数据，
++        // 热门页去掉 AI 作品，「AI 热门」只留 AI 作品。
++        public var hubShowsAIOnly = false
+ 
+         var filteredGalleries: [Gallery] {
+-            guard !keyword.isEmpty else { return galleries }
+-            return galleries.filter({ $0.titleMatches(keyword) })
++            let visible = hubShowsAIOnly ? galleries.hubKeepingAIGenerated() : galleries.hubRemovingAIGenerated()
++            guard !keyword.isEmpty else { return visible }
++            return visible.filter({ $0.titleMatches(keyword) })
++        }
++        /// [Hub] 筛掉之后一个都不剩时，显示「没有找到」而不是一片空白。
++        var hubDisplayLoadingState: LoadingState {
++            guard loadingState == .idle, keyword.isEmpty, !galleries.isEmpty, filteredGalleries.isEmpty
++            else { return loadingState }
++            return .failed(.notFound)
+         }
+         public var galleries = [Gallery]()
+         public var loadingState: LoadingState = .idle
+ 
+-        public init() {}
++        public init(hubShowsAIOnly: Bool = false) {
++            self.hubShowsAIOnly = hubShowsAIOnly
++        }
+     }
+ 
+     public enum Action: BindableAction {
+diff --git a/AppPackage/Sources/HomeFeature/Popular/PopularView.swift b/AppPackage/Sources/HomeFeature/Popular/PopularView.swift
+index d1a94c2..bcc0430 100644
+--- a/AppPackage/Sources/HomeFeature/Popular/PopularView.swift
++++ b/AppPackage/Sources/HomeFeature/Popular/PopularView.swift
+@@ -20,7 +20,7 @@ struct PopularView: View {
+             displayMode: store.setting.galleryListPresentation[.popular],
+             galleries: store.filteredGalleries,
+             pageNumber: nil,
+-            loadingState: store.loadingState,
++            loadingState: store.hubDisplayLoadingState,
+             footerLoadingState: .idle,
+             fetchAction: { store.send(.fetchGalleries) },
+             navigateAction: { store.send(.delegate(.pushDetail($0))) },
+@@ -36,7 +36,8 @@ struct PopularView: View {
+         }
+         .searchable(text: $store.keyword, placement: .navigationBarDrawer, prompt: .filter)
+         .toolbar(content: toolbar)
+-        .navigationTitle(.popular)
++        // [Hub] 同一个页面也用来显示「AI 热门」。
++        .navigationTitle(store.hubShowsAIOnly ? Text(verbatim: "AI 热门") : Text(.popular))
+     }
+ 
+     private func toolbar() -> some ToolbarContent {
+diff --git a/AppPackage/Sources/HomeFeature/Toplists/ToplistsReducer.swift b/AppPackage/Sources/HomeFeature/Toplists/ToplistsReducer.swift
+index 4a6d802..f9e0983 100644
+--- a/AppPackage/Sources/HomeFeature/Toplists/ToplistsReducer.swift
++++ b/AppPackage/Sources/HomeFeature/Toplists/ToplistsReducer.swift
+@@ -25,6 +25,8 @@ public struct ToplistsReducer: Sendable {
+     public struct State: Equatable {
+         @SharedReader(.tagTranslator) public var tagTranslator: TagTranslator
+         @SharedReader(.setting) public var setting: Setting
++        // [Hub] 排行榜要按全局筛选排除分类，所以这里也读它。
++        @SharedReader(.globalFilter) public var globalFilter: AppModels.Filter
+         public var keyword = ""
+         public var jumpPageIndex = ""
+         @Presents public var alert: AppAlertState<Alert>?
+@@ -32,8 +34,13 @@ public struct ToplistsReducer: Sendable {
+         public var type: ToplistsType = .yesterday
+ 
+         var filteredGalleries: [Gallery]? {
+-            guard !keyword.isEmpty else { return galleries }
+-            return galleries?.filter({ $0.titleMatches(keyword) })
++            // [Hub] 排行榜不显示 AI 作品，也不显示全局筛选里排除的分类。
++            // 站点的排行榜接口不支持筛选，所以在显示时筛。
++            let visible = galleries?
++                .hubRemovingAIGenerated()
++                .hubRemovingExcludedCategories(globalFilter)
++            guard !keyword.isEmpty else { return visible }
++            return visible?.filter({ $0.titleMatches(keyword) })
+         }
+ 
+         public var rawGalleries = [ToplistsType: [Gallery]]()
+diff --git a/AppPackage/Sources/NetworkingFeature/Request+GalleryTitles.swift b/AppPackage/Sources/NetworkingFeature/Request+GalleryTitles.swift
+index e73b311..64d6f42 100644
+--- a/AppPackage/Sources/NetworkingFeature/Request+GalleryTitles.swift
++++ b/AppPackage/Sources/NetworkingFeature/Request+GalleryTitles.swift
+@@ -24,6 +24,9 @@ extension Request {
+             var result = gallery
+             result.title = source.title
+             result.jpnTitle = source.jpnTitle
++            // [Hub] 列表页面只显示一部分标签，AI 标签经常不在其中。元数据里的标签是完整的，
++            // 把 AI 标签补进列表项，后面各处才能可靠地判断一个画廊是不是 AI 作品。
++            result.hubAdoptAIGeneratedTag(from: source)
+             return result
+         }
+     }

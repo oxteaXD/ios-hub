@@ -2,10 +2,13 @@
 # 在 iOS 模拟器里跑宿主壳的界面测试。在 macOS 上运行，运行前需要先执行 scripts/ci_setup.sh。
 #
 # 测试内容见 UITests/HubUITests.swift：从启动页进入各个应用、用悬浮按钮返回和切换、
-# 启动时直接进入上次使用的应用、收到某个应用的链接时切换过去。
-# 每一步屏幕上的文字都会被收集进 build/smoke/result.txt，截图导出到 build/smoke/screenshots。
+# 启动时直接进入上次使用的应用、收到某个应用的链接时切换过去、EhPanda 主页的「AI 热门」入口等。
+# 测试结果和各界面上的文字收集进 build/smoke/result.txt。
 #
-# 这个测试不登录、不联网，只能发现启动和切换时的问题，登录、浏览、下载这些功能测不到。
+# 只有 result.txt 会作为构建产物上传。截图和完整的测试日志都留在运行器上不上传：
+# 测试会进入 EhPanda 的主页，这两样东西里可能带有站点内容，而公开仓库的构建产物谁都能下载。
+#
+# 这个测试不登录，只能发现启动、切换和页面跳转的问题，浏览、下载这些功能测不到。
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -127,9 +130,6 @@ if [ -n "$SCREENS" ]; then
         { text = $0; sub(/^[^|]*\|/, "", text); printf "    %s\n", text }
     ' | tee -a "$RESULT"
 fi
-
-# 截图从测试结果包里导出来，方便下载查看。导不出来不影响测试结论。
-xcrun xcresulttool export attachments --path "$XCRESULT" --output-path "${OUT}/screenshots" >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------
 # 崩溃报告：测试通过也可能是 App 崩了之后被重新拉起，所以单独再查一遍。

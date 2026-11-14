@@ -14,6 +14,21 @@
 
 系统要求：**iOS / iPadOS 27.0 及以上**（取决于 EhPanda 3.0.0）。
 
+### 对 EhPanda 做的定制
+
+这里的 EhPanda 不是原样的上游版本，多了下面这些内容筛选
+（实现见 [patches/ehpanda](patches/ehpanda) 和 [bridges/ehpanda](bridges/ehpanda)）：
+
+- **默认不显示真人作品。** Cosplay 和 Asian Porn 两个分类在搜索、全局、关注三套筛选里默认排除，
+  筛选里点「重置」也是回到这个状态。想看的话，在筛选里把这两个分类重新打开即可。
+  收藏、历史、下载不受影响。
+- **主页不显示 AI 作品。** 顶部大卡片、首页、排行榜、热门这四个栏目，连同它们点「查看全部」
+  进去的完整列表，都不显示带 `other:ai generated` 标签的画廊。搜索和关注保持原样。
+- **顶部大卡片改为热门前几名。** 去掉 AI 作品后，按热门列表本身的顺序取前 6 个；
+  上游的做法是从标题最长的 10 个里随机挑 6 个。
+- **AI 热门。** 主页最底部有一个入口，里面是热门列表里的 AI 作品，和热门页用的是同一份数据：
+  热门页去掉 AI，这里只留 AI。
+
 ## 得到安装包
 
 本仓库不需要 Mac。每次推送到 `main`，GitHub Actions 会在官方的 `xcode-27` 运行器上编译，
@@ -28,15 +43,20 @@
 
 每次构建还会并行跑一遍**模拟器界面测试**（[HubUITests.swift](UITests/HubUITests.swift)）：
 在 iOS 模拟器里真正点一遍——从启动页进入各个应用、用悬浮按钮返回和切换、长按悬浮按钮直接切换、
-拖动悬浮按钮、启动时直接进入上次使用的应用、收到某个应用的链接时切换过去、Pixiv 在 iPhone 上保持竖屏。
-每个界面上的文字会写进运行摘要，截图放在 `smoke-test` 里。
-这个测试不登录、不联网，只覆盖启动和切换，登录、浏览、下载这些功能测不到。
+拖动悬浮按钮、启动时直接进入上次使用的应用、收到某个应用的链接时切换过去、Pixiv 在 iPhone 上保持竖屏，
+以及 EhPanda 主页的「AI 热门」入口能打开、从屏幕左边缘右滑能返回。
+测试结果和启动页、各应用首次启动页上的文字会写进运行摘要。
+
+这个测试不登录，只覆盖启动、切换和页面跳转，浏览、下载这些功能测不到，内容筛选对不对也测不到。
+测试会进入 EhPanda 的主页，所以截图和完整的测试日志都不上传，主页上的文字也不记录：
+公开仓库的构建记录和产物谁都能看到。
 
 ## 使用
 
 - 打开是启动页，点卡片进入对应的应用。
-- 进入应用后屏幕上有一个半透明的悬浮按钮：**轻点**回到启动页，**长按**直接切到别的应用，
-  **按住拖动**可以挪位置。应用弹出面板或全屏页面时它会被盖住，关掉面板就又能用了。
+- 进入应用后屏幕右侧有一个半透明的悬浮按钮：**轻点**回到启动页，**长按**直接切到别的应用，
+  **按住**可以上下拖动。它只停靠在右边缘，左边缘留给系统的侧滑返回。
+  应用弹出面板或全屏页面时它会被盖住，关掉面板就又能用了。
 - 启动页上可以打开「启动时直接进入上次使用的应用」。
 
 各应用的数据互相独立，登录状态、设置、下载都和单独安装时一样保存在各自的位置。
@@ -52,9 +72,10 @@ App/                    宿主 App 的源码
   Resources/              宿主自己的图标和颜色
 UITests/                宿主壳的界面测试（只在模拟器上跑，不进安装包）
 Config/Info.plist       合并了各应用所需条目的 Info.plist
-bridges/                构建时复制进上游模块的桥接文件（只新增，不改上游文件）
+patches/                对上游的成片改动，标准补丁文件，构建时打进上游
+bridges/                构建时复制进上游模块的新文件（只新增，不改上游文件）
 scripts/
-  prepare.py              构建前准备：打补丁、注入桥接文件、准备标签数据、合并依赖锁定文件
+  prepare.py              构建前准备：打补丁、复制新文件、准备标签数据和分类颜色、合并依赖锁定文件
   ci_setup.sh             云端各作业共用的准备步骤：装 XcodeGen、跑 prepare.py、生成工程
   build_ipa.sh            编译并打包成未签名 IPA
   smoke_test.sh           在模拟器里跑界面测试并整理结果
@@ -97,19 +118,33 @@ EhPanda 是首次进入时才启动的：在那之前它不会改任何全局设
 ### 对上游的改动
 
 上游子模块里是原样代码，所有改动都由 [scripts/prepare.py](scripts/prepare.py) 在构建前完成，
-改动处都有 `[Hub]` 标记。每个补丁的定位文字必须在上游文件里恰好出现一次，否则脚本直接报错，
-不会悄悄打错地方。
+改动处都有 `[Hub]` 标记。改动有三种写法：
 
-| 上游 | 文件 | 改动 |
-| --- | --- | --- |
-| EhPanda | `AppPackage/Package.swift` | 移除 SwiftLint 依赖和构建插件（下游构建不跑上游的代码规范检查） |
-| EhPanda | `NetworkingFeature/DFURLProtocol.swift` | 域名前置只接管 E-Hentai 系域名 |
-| EhPanda | `AppFeature/HubBridge.swift`（新增） | 让宿主能把场景阶段变化转发给 EhPanda |
-| Pixiv-SwiftUI | `App/PixivApp.swift` | 去掉 `@main` |
-| Pixiv-SwiftUI | `Core/Network/CustomProxyConfiguration.swift` | 调整图片代理时保留下载器的现有配置 |
+- **按定位文字替换**（写在 `prepare.py` 的 `PATCHES` 里）：一两行的小改动，
+  以及内容会随上游版本变化的地方。定位文字必须在上游文件里恰好出现一次。
+- **补丁文件**（`patches/<上游>/*.patch`）：成片的功能改动。
+- **新增文件**（`bridges/<上游>/`）：原样复制进上游的模块目录，不碰上游已有的文件。
 
-另外，Pixiv 上游编译时需要的标签翻译数据 `tags.json` 存在它的私有仓库里。构建时脚本会从它对应版本的
-发行包里取出这份数据；取不到就用空数据，标签翻译会回退到 Pixiv 自带的译名。
+前两种只要对不上就直接报错，不会悄悄打错地方。
+
+| 上游 | 文件 | 改动 | 写法 |
+| --- | --- | --- | --- |
+| EhPanda | `AppPackage/Package.swift` | 移除 SwiftLint 依赖和构建插件（下游构建不跑上游的代码规范检查） | 替换 |
+| EhPanda | `NetworkingFeature/DFURLProtocol.swift` | 域名前置只接管 E-Hentai 系域名 | 替换 |
+| EhPanda | `AppFeature/HubBridge.swift` | 让宿主能把场景阶段变化转发给 EhPanda | 新增 |
+| EhPanda | `AppModels`、`NetworkingFeature`、`HomeFeature` 里的 10 个文件 | 内容筛选：默认不显示真人作品、主页不显示 AI 作品、顶部大卡片的取法、「AI 热门」入口 | 补丁文件 |
+| EhPanda | `AppModels/HubContentFilters.swift` | 判断 AI 作品、按分类筛选的逻辑 | 新增 |
+| EhPanda | `HomeFeature/HubAIPopular.swift` | 顶部大卡片的取法、「AI 热门」入口的界面 | 新增 |
+| Pixiv-SwiftUI | `App/PixivApp.swift` | 去掉 `@main` | 替换 |
+| Pixiv-SwiftUI | `Core/Network/CustomProxyConfiguration.swift` | 调整图片代理时保留下载器的现有配置 | 替换 |
+
+构建时还会准备两样上游工程以外的东西：
+
+- **Pixiv 的标签翻译数据** `tags.json`。上游把它放在私有仓库里，脚本从上游对应版本的发行包里取出来；
+  取不到就用空数据，标签翻译会回退到 Pixiv 自带的译名。
+- **EhPanda 的分类颜色**。EhPanda 的包按名字从主 bundle 里取分类颜色（列表里分类标签的底色），
+  这些颜色放在它自己壳工程的资源目录里。那个资源目录不能整个带上（里面的强调色会和 Pixiv 的重名），
+  所以脚本只把分类颜色抽出来，做成一个单独的资源目录。
 
 ## 新增一个应用
 
@@ -129,12 +164,21 @@ git -C upstream/EhPanda fetch --tags && git -C upstream/EhPanda checkout <新版
 python3 scripts/prepare.py all --dry-run
 ```
 
-`--dry-run` 只检查不改动：补丁还能不能准确定位、Pixiv 的入口文件有没有变。都通过后，
+`--dry-run` 只检查不改动：补丁还能不能对上、Pixiv 的入口文件有没有变。都通过后，
 更新 `upstream/versions.json`，提交子模块指针的变化并推送，云端会重新构建。
-如果脚本报某个补丁定位不到，说明上游改了那段代码，需要对照新代码更新 `scripts/prepare.py`。
+
+如果脚本报某个补丁对不上，说明上游改了那段代码：
+
+- 是 `PATCHES` 里的，对照新代码改 `scripts/prepare.py` 里的定位文字。
+- 是补丁文件，在子模块里照着旧补丁把改动重新做一遍，再用
+  `git -C upstream/EhPanda diff > patches/ehpanda/<名字>.patch` 重新导出。
 
 本机想看补丁打完的效果可以直接运行 `python3 scripts/prepare.py all`，看完用
 `python3 scripts/prepare.py revert` 把子模块恢复原样。
+
+在 Windows 上，git 默认把检出的文件转成 CRLF 换行，而补丁文件是 LF，两者对不上。
+第一次使用前先运行一次 `python scripts/prepare.py normalize`，把子模块的工作区换成 LF 换行
+（只改子模块的本地配置，不影响仓库内容）。
 
 ## 已知限制
 
@@ -144,6 +188,10 @@ python3 scripts/prepare.py all --dry-run
 - 同时开启 EhPanda 的域名前置和 Pixiv 的自定义代理时，两者都要改 Kingfisher 默认下载器的配置，
   后改的一方生效时会保留对方的设置，但这个组合没有专门测试过。
 - Pixiv 的 iPad 外接键盘菜单命令没有接入。
+- EhPanda 的 AI 作品是靠站点的 `other:ai generated` 标签判断的，没打这个标签的 AI 作品筛不掉。
+- EhPanda 的排行榜在站点那边不支持筛选，AI 作品和被排除的分类是拿到数据之后才去掉的，
+  所以每一页显示出来的条数会比 50 少，名次也是去掉之后重新排的。
+- 「AI 热门」的数量取决于当时热门列表里有多少 AI 作品，不能翻页。
 
 ## 许可证
 

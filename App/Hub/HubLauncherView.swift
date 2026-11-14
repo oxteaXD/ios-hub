@@ -27,7 +27,7 @@ struct HubLauncherView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Toggle("启动时直接进入上次使用的应用", isOn: $state.autoEnterLastModule)
 
-                        Text("进入应用后，轻点屏幕上的悬浮按钮回到这里，长按它可以直接切到别的应用，按住拖动可以挪位置。")
+                        Text("进入应用后，轻点屏幕右侧的悬浮按钮回到这里，长按它可以直接切到别的应用，按住可以上下拖动。")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }

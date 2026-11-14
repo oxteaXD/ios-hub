@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """构建前的准备脚本。
 
-上游仓库以 git 子模块的形式保持原样，所有对上游的改动都集中在这个脚本里：
+上游仓库以 git 子模块的形式保持原样，所有对上游的改动都由这个脚本在构建前完成：
 
-1. patch    给上游源码打补丁（定位文字必须恰好出现一次，否则报错，提醒人工核对）
-2. bridges  把 bridges/ 下的桥接文件复制进上游模块目录（只新增文件，不改上游文件）
+1. patch    给上游源码打补丁，有两种写法：
+            - 脚本里的 PATCHES：按定位文字替换，适合一两行的小改动，
+              以及内容会随上游版本变化的地方（比如带版本号的依赖声明）；
+            - patches/<上游>/*.patch：标准的补丁文件，适合成片的功能改动。
+            两种都要求能准确对上，否则直接报错，提醒人工核对。
+2. bridges  把 bridges/ 下的文件复制进上游模块目录（只新增文件，不改上游文件）
 3. tags     准备 Pixiv 的标签翻译数据 generated/tags.json
-4. resolved 合并两个上游的依赖锁定文件，写进生成的 Xcode 工程
+4. assets   生成 EhPanda 的分类颜色资源目录 generated/EhPandaAssets.xcassets
+5. resolved 合并两个上游的依赖锁定文件，写进生成的 Xcode 工程
 
 用法见 `python3 scripts/prepare.py --help`。只依赖标准库，兼容 Python 3.9 及以上。
 """
@@ -18,6 +23,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -30,8 +36,15 @@ UPSTREAM = ROOT / "upstream"
 EHPANDA = UPSTREAM / "EhPanda"
 PIXIV = UPSTREAM / "Pixiv-SwiftUI"
 BRIDGES = ROOT / "bridges"
+PATCH_FILES = ROOT / "patches"
 GENERATED = ROOT / "generated"
 VERSIONS_FILE = UPSTREAM / "versions.json"
+
+# 补丁文件的去向：patches/<名字>/*.patch 打在对应的上游仓库上。
+PATCH_FILE_REPOS = {
+    "ehpanda": EHPANDA,
+    "pixiv": PIXIV,
+}
 
 # 桥接文件的去向：bridges/<名字>/ 下的目录结构原样复制到对应的上游目录。
 BRIDGE_DESTINATIONS = {
@@ -228,6 +241,52 @@ def apply_patches(dry_run: bool) -> None:
             say("  已应用  {}".format(patch.title))
 
 
+def run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(repo), *arguments],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+
+
+def patch_file_pairs() -> list[tuple[Path, Path]]:
+    pairs = []
+    for name, repo in sorted(PATCH_FILE_REPOS.items()):
+        directory = PATCH_FILES / name
+        if directory.is_dir():
+            pairs.extend((repo, patch) for patch in sorted(directory.glob("*.patch")))
+    return pairs
+
+
+def apply_patch_files(dry_run: bool) -> None:
+    say("== 上游补丁文件 ==")
+    for repo, patch in patch_file_pairs():
+        name = relative(patch)
+        # 反着能打上，说明这个补丁已经在工作区里了。
+        if run_git(repo, "apply", "--reverse", "--check", str(patch)).returncode == 0:
+            say("  已打过  {}".format(name))
+            continue
+        check = run_git(repo, "apply", "--check", str(patch))
+        if check.returncode != 0:
+            hint = ""
+            if os.name == "nt":
+                hint = (
+                    "\n如果是在 Windows 上：子模块工作区默认是 CRLF 换行，补丁文件是 LF，两者对不上。"
+                    "先运行 python scripts/prepare.py normalize 把子模块换成 LF 换行再试。"
+                )
+            raise PrepareError(
+                "补丁文件 {} 打不上，上游很可能改了相关代码，需要对照新代码重新生成这个补丁。\n{}{}".format(
+                    name, check.stderr.strip(), hint
+                )
+            )
+        if dry_run:
+            say("  可应用  {}".format(name))
+            continue
+        result = run_git(repo, "apply", "--whitespace=nowarn", str(patch))
+        if result.returncode != 0:
+            raise PrepareError("补丁文件 {} 应用失败：\n{}".format(name, result.stderr.strip()))
+        say("  已应用  {}".format(name))
+
+
 def check_pixiv_entry() -> None:
     """上游的入口文件一旦变化就提醒：宿主的 Pixiv 入口视图是照着它写的。"""
     target = PIXIV / PIXIV_ENTRY_FILE
@@ -328,6 +387,34 @@ def prepare_tags(mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# EhPanda 的分类颜色
+# ---------------------------------------------------------------------------
+
+def build_category_colors() -> None:
+    """把 EhPanda 壳工程里的分类颜色做成一个单独的资源目录。
+
+    EhPanda 的包按名字从主 bundle 里取分类颜色（例如 "E-Hentai/Doujinshi"），这些颜色放在它
+    自己壳工程的资源目录里。宿主不能直接带上那个资源目录：里面还有一个 AccentColor，会和
+    Pixiv 的同名颜色冲突。所以只把 Category 这一部分拷出来。
+    """
+    say("== EhPanda 分类颜色 ==")
+    source = EHPANDA / "App" / "Assets.xcassets" / "Category"
+    if not source.is_dir():
+        raise PrepareError("找不到 {}，上游可能调整了分类颜色的位置。".format(relative(source)))
+    destination = GENERATED / "EhPandaAssets.xcassets"
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    contents = {"info": {"author": "xcode", "version": 1}}
+    (destination / "Contents.json").write_text(json.dumps(contents, indent=2) + "\n", encoding="utf-8")
+    shutil.copytree(source, destination / "Category")
+    count = sum(1 for _ in destination.rglob("*.colorset"))
+    if count == 0:
+        raise PrepareError("{} 里一个颜色都没有。".format(relative(source)))
+    say("  已生成  {}（{} 个颜色）".format(relative(destination), count))
+
+
+# ---------------------------------------------------------------------------
 # 依赖锁定文件
 # ---------------------------------------------------------------------------
 
@@ -373,6 +460,12 @@ def merge_resolved(project: Path) -> None:
 def revert() -> None:
     """把上游子模块恢复成没打补丁、没注入文件的原样（本机调试用）。"""
     say("== 还原上游 ==")
+    for repo, patch in patch_file_pairs():
+        if run_git(repo, "apply", "--reverse", "--check", str(patch)).returncode == 0:
+            result = run_git(repo, "apply", "--reverse", "--whitespace=nowarn", str(patch))
+            if result.returncode != 0:
+                raise PrepareError("补丁文件 {} 撤销失败：\n{}".format(relative(patch), result.stderr.strip()))
+            say("  已撤销  {}".format(relative(patch)))
     for patch in PATCHES:
         subprocess.run(["git", "-C", str(patch.repo), "checkout", "--", patch.path], check=True)
         say("  已还原  {}".format(relative(patch.target)))
@@ -380,6 +473,34 @@ def revert() -> None:
         if destination.is_file():
             destination.unlink()
             say("  已删除  {}".format(relative(destination)))
+
+
+def normalize() -> None:
+    """把上游子模块的工作区换成 LF 换行（只在 Windows 上需要）。
+
+    Windows 上 git 默认把检出的文件转成 CRLF，而补丁文件是 LF，对不上。这里只改子模块自己的
+    本地配置并重新检出，不影响仓库内容。
+    """
+    say("== 把上游子模块换成 LF 换行 ==")
+    for repo in (EHPANDA, PIXIV):
+        name = relative(repo)
+        if run_git(repo, "status", "--porcelain").stdout.strip():
+            raise PrepareError("{} 里有未还原的改动，先运行 python scripts/prepare.py revert".format(name))
+        run_git(repo, "config", "core.autocrlf", "false")
+        tracked = run_git(repo, "ls-files", "-z").stdout.split("\0")
+        for path in filter(None, tracked):
+            target = repo / path
+            if target.is_file():
+                target.unlink()
+        for step in (("checkout-index", "--force", "--all"), ("read-tree", "HEAD"), ("update-index", "-q", "--refresh")):
+            result = run_git(repo, *step)
+            # update-index --refresh 在有内容差异时返回非零；这里刚重新检出，不会有差异。
+            if result.returncode != 0 and step[0] != "update-index":
+                raise PrepareError("{} 执行 git {} 失败：\n{}".format(name, " ".join(step), result.stderr.strip()))
+        remaining = run_git(repo, "status", "--porcelain").stdout.strip()
+        if remaining:
+            raise PrepareError("{} 重新检出后仍有改动，请手动检查。".format(name))
+        say("  已完成  {}".format(name))
 
 
 # ---------------------------------------------------------------------------
@@ -393,7 +514,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="构建前准备：给上游打补丁、注入桥接文件、准备数据。")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    all_parser = commands.add_parser("all", help="依次执行 patch、bridges、tags")
+    all_parser = commands.add_parser("all", help="依次执行 patch、bridges、tags、assets")
     all_parser.add_argument("--tags", choices=["auto", "release", "empty"], default="auto")
     all_parser.add_argument("--dry-run", action="store_true", help="只检查，不改动任何文件")
 
@@ -403,26 +524,35 @@ def main() -> int:
     tags_parser = commands.add_parser("tags", help="只准备标签翻译数据")
     tags_parser.add_argument("--mode", choices=["auto", "release", "empty"], default="auto")
 
+    commands.add_parser("assets", help="只生成 EhPanda 的分类颜色资源目录")
+
     resolved_parser = commands.add_parser("resolved", help="把合并后的依赖锁定文件写进 Xcode 工程")
     resolved_parser.add_argument("--project", required=True, help="xcodegen 生成的 .xcodeproj 路径")
 
     commands.add_parser("revert", help="把上游子模块恢复原样")
+    commands.add_parser("normalize", help="把上游子模块的工作区换成 LF 换行（Windows 上打补丁文件前需要）")
 
     arguments = parser.parse_args()
     try:
         require_upstream()
         if arguments.command in ("all", "patch"):
             apply_patches(arguments.dry_run)
+            apply_patch_files(arguments.dry_run)
             check_pixiv_entry()
             inject_bridges(arguments.dry_run)
         if arguments.command == "all" and not arguments.dry_run:
             prepare_tags(arguments.tags)
+            build_category_colors()
         if arguments.command == "tags":
             prepare_tags(arguments.mode)
+        if arguments.command == "assets":
+            build_category_colors()
         if arguments.command == "resolved":
             merge_resolved(Path(arguments.project).resolve())
         if arguments.command == "revert":
             revert()
+        if arguments.command == "normalize":
+            normalize()
     except PrepareError as error:
         if os.environ.get("GITHUB_ACTIONS") == "true":
             print("::error::" + str(error).replace("\n", " "), flush=True)
