@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// 宿主壳的界面测试：在模拟器里真正点一遍——从启动页进入各个应用，用悬浮按钮返回和切换。
@@ -93,6 +94,93 @@ final class HubUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
     }
 
+    /// 长按悬浮按钮弹出菜单，可以不经过启动页直接切到另一个应用。
+    @MainActor
+    func testLongPressingSwitcherOffersOtherModules() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "ehpanda"])
+        app.launch()
+
+        let switcher = element("hub.switcher", in: app)
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "没有直接进入上次使用的应用")
+        XCTAssertEqual(switcher.value as? String, "EhPanda")
+        settle(3)
+
+        switcher.press(forDuration: 1.5)
+        let pixivItem = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Pixiv"))
+            .firstMatch
+        XCTAssertTrue(pixivItem.waitForExistence(timeout: 10), "长按悬浮按钮后，菜单里没有出现 Pixiv")
+        report("长按悬浮按钮的菜单", app)
+
+        pixivItem.tap()
+        XCTAssertTrue(
+            waitUntil(timeout: 30) { (switcher.value as? String) == "Pixiv" },
+            "在菜单里选 Pixiv 后没有切换过去"
+        )
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
+    /// 按住悬浮按钮可以拖到屏幕另一侧，松手后吸附在那一侧。
+    @MainActor
+    func testDraggingSwitcherMovesItToTheOtherSide() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "ehpanda"])
+        app.launch()
+
+        let switcher = element("hub.switcher", in: app)
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "没有直接进入上次使用的应用")
+        settle(3)
+
+        // 之前的测试可能已经把它挪过位置，所以先看它现在在哪一侧，再往另一侧拖。
+        let before = switcher.frame
+        let startsOnRight = before.midX > app.frame.midX
+        let start = switcher.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: startsOnRight ? 0.2 : 0.8, dy: 0.35))
+        start.press(forDuration: 0.1, thenDragTo: end)
+        settle(2)
+
+        let after = switcher.frame
+        print("HUBUI|拖动悬浮按钮|拖动前 \(describe(before))，拖动后 \(describe(after))，屏幕 \(describe(app.frame))")
+        if startsOnRight {
+            XCTAssertLessThan(after.midX, app.frame.midX, "往左拖之后，悬浮按钮应该吸附在左侧")
+        } else {
+            XCTAssertGreaterThan(after.midX, app.frame.midX, "往右拖之后，悬浮按钮应该吸附在右侧")
+        }
+        XCTAssertEqual(switcher.value as? String, "EhPanda", "拖动不应该触发切换")
+    }
+
+    /// Pixiv 在 iPhone 上只允许竖屏；启动页和 EhPanda 可以横屏。
+    @MainActor
+    func testOrientationFollowsActiveModule() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "只在 iPhone 上检查屏幕方向的限制")
+
+        let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "pixiv"])
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+
+        let switcher = element("hub.switcher", in: app)
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "没有直接进入上次使用的应用")
+        XCTAssertEqual(switcher.value as? String, "Pixiv")
+        settle(3)
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        settle(4)
+        print("HUBUI|屏幕方向|Pixiv 里把设备横过来：界面 \(describe(app.frame))")
+        XCTAssertLessThan(app.frame.width, app.frame.height, "在 Pixiv 里把设备横过来，界面应该保持竖屏")
+
+        switcher.tap()
+        let pixivCard = element("hub.module.pixiv", in: app)
+        XCTAssertTrue(pixivCard.waitForExistence(timeout: 30), "轻点悬浮按钮后没有回到启动页")
+        let launcherRotated = waitUntil(timeout: 15) { app.frame.width > app.frame.height }
+        print("HUBUI|屏幕方向|回到启动页（设备仍然横着）：界面 \(describe(app.frame))")
+        XCTAssertTrue(launcherRotated, "回到启动页后，界面应该跟着设备转成横屏")
+
+        pixivCard.tap()
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "从横屏的启动页进入 Pixiv 后没有出现悬浮按钮")
+        let pixivRotatedBack = waitUntil(timeout: 15) { app.frame.width < app.frame.height }
+        print("HUBUI|屏幕方向|再次进入 Pixiv（设备仍然横着）：界面 \(describe(app.frame))")
+        XCTAssertTrue(pixivRotatedBack, "再次进入 Pixiv 后，界面应该转回竖屏")
+    }
+
     // MARK: 辅助方法
 
     @MainActor
@@ -112,7 +200,25 @@ final class HubUITests: XCTestCase {
         Thread.sleep(forTimeInterval: seconds)
     }
 
+    /// 每隔半秒检查一次条件，直到满足或者超时。
+    @MainActor
+    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        return condition()
+    }
+
+    private func describe(_ rect: CGRect) -> String {
+        "x=\(Int(rect.minX)) y=\(Int(rect.minY)) 宽=\(Int(rect.width)) 高=\(Int(rect.height))"
+    }
+
     /// 截一张图存进测试结果，并把屏幕上的文字打印出来。
+    /// 悬浮按钮在场时，还会报告它的位置，以及它有没有压在别的按钮上。
     @MainActor
     private func report(_ name: String, _ app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -121,32 +227,54 @@ final class HubUITests: XCTestCase {
         add(attachment)
 
         var texts: [String] = []
+        var buttons: [(label: String, frame: CGRect)] = []
+        var switcherFrame: CGRect?
         do {
-            try collectTexts(from: app.snapshot(), into: &texts)
+            try inspect(app.snapshot(), texts: &texts, buttons: &buttons, switcherFrame: &switcherFrame)
         } catch {
             print("HUBUI|\(name)|（读取界面内容失败：\(error.localizedDescription)）")
         }
+
         print("HUBUI|\(name)|（共 \(texts.count) 项）")
         for text in texts.prefix(50) {
             print("HUBUI|\(name)|\(text)")
         }
+        if let switcherFrame {
+            let covered = buttons.filter { $0.frame.intersects(switcherFrame) }.map { $0.label }
+            let verdict = covered.isEmpty ? "没有压住别的按钮" : "压住了这些按钮：" + covered.joined(separator: "、")
+            print("HUBUI|\(name)|〔悬浮按钮 \(describe(switcherFrame))，屏幕 \(describe(app.frame))，\(verdict)〕")
+        }
     }
 
-    private func collectTexts(from snapshot: any XCUIElementSnapshot, into texts: inout [String]) {
-        switch snapshot.elementType {
-        case .staticText, .button, .navigationBar, .tab, .textField, .secureTextField, .link:
-            let label = snapshot.label
+    private func inspect(
+        _ snapshot: any XCUIElementSnapshot,
+        texts: inout [String],
+        buttons: inout [(label: String, frame: CGRect)],
+        switcherFrame: inout CGRect?
+    ) {
+        let label = String(
+            snapshot.label
                 .replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: .whitespaces)
-            let text = String(label.prefix(80))
-            if !text.isEmpty, !texts.contains(text) {
-                texts.append(text)
+                .prefix(80)
+        )
+
+        if snapshot.identifier == "hub.switcher" {
+            switcherFrame = snapshot.frame
+        } else if snapshot.elementType == .button, !label.isEmpty {
+            buttons.append((label, snapshot.frame))
+        }
+
+        switch snapshot.elementType {
+        case .staticText, .button, .navigationBar, .tab, .textField, .secureTextField, .link:
+            if !label.isEmpty, !texts.contains(label) {
+                texts.append(label)
             }
         default:
             break
         }
         for child in snapshot.children {
-            collectTexts(from: child, into: &texts)
+            inspect(child, texts: &texts, buttons: &buttons, switcherFrame: &switcherFrame)
         }
     }
 }
