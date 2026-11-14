@@ -75,8 +75,16 @@ struct HubSwitcherBubble: View {
                     Label("回到启动页", systemImage: "square.grid.2x2")
                 }
             }
+            // 对辅助功能来说它是一个按钮：名字是「回到启动页」，值是当前所在的应用。
+            // 界面测试也靠这里的标识和值来判断当前显示的是哪个应用。
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("回到启动页")
+            .accessibilityValue(state.activeModule?.title ?? "")
             .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                state.goHome()
+            }
+            .accessibilityIdentifier("hub.switcher")
     }
 
     private func restingCenter(in area: CGSize) -> CGPoint {

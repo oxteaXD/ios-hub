@@ -112,12 +112,34 @@ targets:
         Release:
           SWIFT_COMPILATION_MODE: wholemodule
 
+  # 宿主壳的界面测试，只在模拟器上跑（见 scripts/smoke_test.sh），不进安装包。
+  HubUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: Hub
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hubapp.Hub.UITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Hub
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+
 schemes:
   Hub:
     build:
       targets:
         Hub: all
+        # 只在测试时才编译，打包安装包时不参与。
+        HubUITests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - HubUITests
     archive:
       config: Release

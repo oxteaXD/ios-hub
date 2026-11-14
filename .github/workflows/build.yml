@@ -62,9 +62,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # 与上面的作业并行：在模拟器里把 App 跑起来，确认启动和切换模块时不崩溃。
+  # 与上面的作业并行：在模拟器里跑宿主壳的界面测试，确认启动和切换模块都正常。
   smoke:
-    name: 模拟器冒烟测试
+    name: 模拟器界面测试
     runs-on: xcode-27
     timeout-minutes: 60
     steps:
@@ -86,7 +86,7 @@ jobs:
           restore-keys: |
             spm-sim-${{ runner.os }}-
 
-      - name: 在模拟器里启动各个应用并截图
+      - name: 在模拟器里跑界面测试
         run: bash scripts/smoke_test.sh
 
       - name: 上传截图和测试结果

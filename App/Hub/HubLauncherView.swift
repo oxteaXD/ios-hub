@@ -19,6 +19,8 @@ struct HubLauncherView: View {
                                 HubModuleCard(module: module)
                             }
                             .buttonStyle(.plain)
+                            // 界面测试靠这个标识找到卡片。
+                            .accessibilityIdentifier("hub.module.\(module.id)")
                         }
                     }
 
