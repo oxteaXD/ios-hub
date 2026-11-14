@@ -34,19 +34,28 @@ note() {
 }
 
 # ---------------------------------------------------------------------------
-# 选一台模拟器：优先用现成的、系统版本最新的 iPhone；没有就新建一台。
+# 选一台模拟器：用现成的 iPhone，优先普通直板机型（折叠屏之类的特殊机型排在后面），
+# 同等条件下取系统版本最新的；一台都没有就新建。
 # ---------------------------------------------------------------------------
 UDID="$(xcrun simctl list devices available -j | python3 -I -c '
-import json, sys
+import json, re, sys
 candidates = []
 for runtime, entries in json.load(sys.stdin)["devices"].items():
     if "iOS" not in runtime:
         continue
     for entry in entries:
-        if entry.get("isAvailable") and entry["name"].startswith("iPhone"):
-            candidates.append((runtime, entry["name"], entry["udid"]))
+        name = entry["name"]
+        if not entry.get("isAvailable") or not name.startswith("iPhone"):
+            continue
+        if name == "iPhone Air":
+            rank = 3
+        elif re.match(r"iPhone \d+", name):
+            rank = 2
+        else:
+            rank = 1
+        candidates.append((rank, runtime, name, entry["udid"]))
 candidates.sort()
-print(candidates[-1][2] if candidates else "")
+print(candidates[-1][3] if candidates else "")
 ')"
 
 if [ -z "$UDID" ]; then
@@ -70,23 +79,23 @@ fi
 note "模拟器：$(xcrun simctl list devices | grep "$UDID" | sed -e 's/^[[:space:]]*//')"
 
 # ---------------------------------------------------------------------------
-# 编译模拟器版本。用 Release 配置，测的是和装到设备上那份同样的代码路径；
-# 保留符号，崩溃时才能看到函数名。
+# 编译模拟器版本。用 Debug 配置加具体的模拟器目标，这是最常规的调用方式。
+#
+# 不要在命令行上覆盖架构相关的设置（ONLY_ACTIVE_ARCH、ARCHS、-sdk 等）：这些覆盖会一并作用到
+# 宏插件上，而宏插件是在宿主机 macOS 上编译的，被覆盖后会找不到 SwiftSyntax 系列模块。
+# Debug 配置本来就只编当前架构，不需要覆盖。
 # ---------------------------------------------------------------------------
 echo "开始编译模拟器版本，完整日志写入 ${LOG}"
 set +e
 xcodebuild build \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
-    -configuration Release \
-    -sdk iphonesimulator \
+    -configuration Debug \
     -destination "platform=iOS Simulator,id=${UDID}" \
     -derivedDataPath "$DERIVED_DATA" \
     -skipMacroValidation \
     -skipPackagePluginValidation \
     CODE_SIGNING_ALLOWED=NO \
-    ONLY_ACTIVE_ARCH=YES \
-    DEPLOYMENT_POSTPROCESSING=NO \
     > "$LOG" 2>&1
 STATUS=$?
 set -e
@@ -99,7 +108,7 @@ if [ "$STATUS" -ne 0 ]; then
     exit "$STATUS"
 fi
 
-APP="${DERIVED_DATA}/Build/Products/Release-iphonesimulator/${SCHEME}.app"
+APP="${DERIVED_DATA}/Build/Products/Debug-iphonesimulator/${SCHEME}.app"
 if [ ! -d "$APP" ]; then
     note "失败  找不到模拟器版本的构建产物 ${APP}"
     exit 1
