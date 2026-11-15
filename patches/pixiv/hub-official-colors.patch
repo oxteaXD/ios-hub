@@ -1,0 +1,249 @@
+diff --git a/Pixiv-SwiftUI/Core/State/ThemeManager.swift b/Pixiv-SwiftUI/Core/State/ThemeManager.swift
+index 4944e9f..f8f22d1 100644
+--- a/Pixiv-SwiftUI/Core/State/ThemeManager.swift
++++ b/Pixiv-SwiftUI/Core/State/ThemeManager.swift
+@@ -11,7 +11,8 @@ import UIKit
+ final class ThemeManager {
+     static let shared = ThemeManager()
+ 
+-    var currentColor: Color = ThemeColors.defaultColor.color
++    // [Hub] 强调色固定为 Pixiv 官方的品牌蓝，不再跟随主题色设置。
++    var currentColor: Color = PixivPalette.brand
+ 
+     var onCurrentColor: Color {
+         currentColor.contrastingTextColor
+@@ -26,22 +27,8 @@ final class ThemeManager {
+     }
+ 
+     func updateThemeColor() {
+-        if userSettingStore.userSetting.isCustomTheme {
+-            let customHex = userSettingStore.userSetting.customThemeColor
+-            let baseColor = Color(hex: customHex)
+-            let lightHex = baseColor.isLight ? baseColor.adjusted(brightnessDelta: -0.22, saturationMultiplier: 1.15).hex : customHex
+-            let darkHex = (!baseColor.isLight && baseColor.relativeLuminance < 0.2)
+-                ? baseColor.adjusted(brightnessDelta: 0.22, saturationMultiplier: 0.9).hex
+-                : customHex
+-            currentColor = Color(lightHex: lightHex, darkHex: darkHex)
+-        } else {
+-            let seedHex = userSettingStore.userSetting.seedColor
+-            if let theme = ThemeColors.find(byHex: seedHex) {
+-                currentColor = theme.color
+-            } else {
+-                currentColor = ThemeColors.defaultColor.color
+-            }
+-        }
++        // [Hub] 颜色预设和自定义颜色已经去掉，以前保存的主题色选择不再生效。
++        currentColor = PixivPalette.brand
+     }
+ 
+     func setThemeColor(_ hex: Int, isCustom: Bool = false) {
+diff --git a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift
+index 0a6b329..bcd6b62 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift
+@@ -383,17 +383,17 @@ private struct IllustDetailActionButtons: View {
+                     Text(isBookmarked ? String(localized: "取消收藏") : String(localized: "收藏"))
+                 }
+                 .font(.subheadline.weight(.semibold))
+-                .foregroundColor(isBookmarked ? themeManager.currentColor : .white)
++                // [Hub] 收藏按钮：没收藏时是和「查看评论」一样的中性灰，收藏后变成 Pixiv 的收藏红。
++                .foregroundColor(isBookmarked ? PixivPalette.like : .primary)
+                 .frame(maxWidth: .infinity)
+                 .padding(.vertical, 10)
+                 .background {
+                     if isBookmarked {
+                         Capsule()
+-                            .fill(themeManager.currentColor.opacity(colorScheme == .dark ? 0.22 : 0.12))
+-                            .overlay(Capsule().strokeBorder(themeManager.currentColor.opacity(0.28), lineWidth: 1))
++                            .fill(PixivPalette.like.opacity(colorScheme == .dark ? 0.22 : 0.12))
++                            .overlay(Capsule().strokeBorder(PixivPalette.like.opacity(0.28), lineWidth: 1))
+                     } else {
+-                        Capsule().fill(themeManager.currentColor)
+-                            .shadow(color: themeManager.currentColor.opacity(0.3), radius: 4, x: 0, y: 2)
++                        Capsule().fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.08))
+                     }
+                 }
+             }
+diff --git a/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift b/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift
+index 481045e..10e46e7 100644
+--- a/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift
++++ b/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift
+@@ -108,7 +108,8 @@ struct NovelRankingCard: View {
+                     Spacer()
+ 
+                     Image(systemName: novel.isBookmarked ? "heart.fill" : "heart")
+-                        .foregroundColor(novel.isBookmarked ? .red : .secondary)
++                        // [Hub] 点亮的心统一用 Pixiv 的收藏红（这里原本是系统红）。
++                        .foregroundColor(novel.isBookmarked ? PixivPalette.like : .secondary)
+                         .font(.system(size: 10))
+                     Text(NumberFormatter.formatCount(novel.totalBookmarks))
+                         .font(.caption2)
+diff --git a/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift b/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift
+index 1894191..07b9f97 100644
+--- a/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift
++++ b/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift
+@@ -196,21 +196,21 @@ struct NovelDetailInfoSection: View {
+                     Text(isBookmarked ? String(localized: "取消收藏") : String(localized: "收藏"))
+                 }
+                 .font(.subheadline.weight(.semibold))
+-                .foregroundColor(isBookmarked ? themeManager.currentColor : .white)
++                // [Hub] 收藏按钮：没收藏时是和「查看评论」一样的中性灰，收藏后变成 Pixiv 的收藏红。
++                .foregroundColor(isBookmarked ? PixivPalette.like : .primary)
+                 .frame(maxWidth: .infinity)
+                 .padding(.vertical, 10)
+                 .background {
+                     if isBookmarked {
+                         Capsule()
+-                            .fill(themeManager.currentColor.opacity(colorScheme == .dark ? 0.22 : 0.12))
++                            .fill(PixivPalette.like.opacity(colorScheme == .dark ? 0.22 : 0.12))
+                             .overlay(
+                                 Capsule()
+-                                    .strokeBorder(themeManager.currentColor.opacity(0.28), lineWidth: 1)
++                                    .strokeBorder(PixivPalette.like.opacity(0.28), lineWidth: 1)
+                             )
+                     } else {
+                         Capsule()
+-                            .fill(themeManager.currentColor)
+-                            .shadow(color: themeManager.currentColor.opacity(0.3), radius: 4, x: 0, y: 2)
++                            .fill(Color.secondary.opacity(colorScheme == .dark ? 0.18 : 0.08))
+                     }
+                 }
+             }
+diff --git a/Pixiv-SwiftUI/Features/Onboarding/OnboardingAppearanceStepView.swift b/Pixiv-SwiftUI/Features/Onboarding/OnboardingAppearanceStepView.swift
+index 0ffc770..06a29cd 100644
+--- a/Pixiv-SwiftUI/Features/Onboarding/OnboardingAppearanceStepView.swift
++++ b/Pixiv-SwiftUI/Features/Onboarding/OnboardingAppearanceStepView.swift
+@@ -13,7 +13,7 @@ struct OnboardingAppearanceStepView: View {
+ 
+             colorSchemeSection
+ 
+-            themeColorSection
++            // [Hub] 已去掉「主题强调色」一栏：颜色预设不再提供，强调色固定为 Pixiv 官方配色。
+         }
+         .frame(maxWidth: 580)
+     }
+diff --git a/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift b/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift
+index f8bf9b6..0af6aaa 100644
+--- a/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift
++++ b/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift
+@@ -204,7 +204,8 @@ struct IllustRankingCard: View {
+                 HStack(spacing: 0) {
+                     HStack(spacing: 1) {
+                         Image(systemName: illust.isBookmarked ? "heart.fill" : "heart")
+-                            .foregroundColor(illust.isBookmarked ? .red : .secondary)
++                            // [Hub] 点亮的心统一用 Pixiv 的收藏红（这里原本是系统红）。
++                            .foregroundColor(illust.isBookmarked ? PixivPalette.like : .secondary)
+                             .font(.system(size: 10))
+                         Text("\(illust.totalBookmarks)")
+                             .font(.caption2)
+diff --git a/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift b/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift
+index 062e24e..0668836 100644
+--- a/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift
++++ b/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift
+@@ -497,7 +497,8 @@ struct BrowseHistoryCard: View {
+ 
+                         Button(action: toggleBookmark) {
+                             Image(systemName: bookmarkIconName)
+-                                .foregroundColor(illust.isBookmarked ? .red : .secondary)
++                                // [Hub] 点亮的心统一用 Pixiv 的收藏红（这里原本是系统红）。
++                                .foregroundColor(illust.isBookmarked ? PixivPalette.like : .secondary)
+                                 .font(.system(size: 14))
+                         }
+                         .buttonStyle(.plain)
+diff --git a/Pixiv-SwiftUI/Features/Settings/ThemeSettingsView.swift b/Pixiv-SwiftUI/Features/Settings/ThemeSettingsView.swift
+index a2e935e..b99fa87 100644
+--- a/Pixiv-SwiftUI/Features/Settings/ThemeSettingsView.swift
++++ b/Pixiv-SwiftUI/Features/Settings/ThemeSettingsView.swift
+@@ -24,7 +24,7 @@ struct ThemeSettingsView: View {
+ 
+     var body: some View {
+         Form {
+-            themeColorSection
++            // [Hub] 已去掉「主题色」一栏：颜色预设和自定义颜色不再提供，强调色固定为 Pixiv 官方配色。
+             themeModeSection
+         }
+         .formStyle(.grouped)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift
+index 2bbd2df..65e03b9 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift
+@@ -189,7 +189,8 @@ struct BookmarkCard: View, Equatable {
+                         }
+                     }) {
+                         Image(systemName: bookmarkIconName)
+-                            .foregroundColor(illust.isBookmarked ? accentColor : .secondary)
++                            // [Hub] 点亮的心用 Pixiv 的收藏红，不跟强调色。
++                            .foregroundColor(illust.isBookmarked ? PixivPalette.like : .secondary)
+                             .font(.system(size: 20))
+                     }
+                     .buttonStyle(.plain)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift
+index 8a74785..188c27a 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift
+@@ -187,7 +187,8 @@ struct IllustCard: View, Equatable {
+                     }
+                 } label: {
+                     Image(systemName: bookmarkIconName)
+-                        .foregroundColor(illust.isBookmarked ? accentColor : .secondary)
++                        // [Hub] 点亮的心用 Pixiv 的收藏红，不跟强调色。
++                        .foregroundColor(illust.isBookmarked ? PixivPalette.like : .secondary)
+                         .font(.system(size: 20))
+                 }
+                 .buttonStyle(.plain)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift
+index 27599cb..e03c80c 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift
+@@ -52,7 +52,8 @@ struct NovelCard: View {
+                     Spacer()
+ 
+                     Image(systemName: isBookmarked ? "heart.fill" : "heart")
+-                        .foregroundColor(isBookmarked ? .red : .secondary)
++                        // [Hub] 点亮的心统一用 Pixiv 的收藏红（这里原本是系统红）。
++                        .foregroundColor(isBookmarked ? PixivPalette.like : .secondary)
+                         .font(.system(size: 10))
+                     Text(NumberFormatter.formatCount(novel.totalBookmarks))
+                         .font(.caption2)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift b/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift
+index ea741c7..545a5ac 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift
+@@ -129,7 +129,8 @@ struct NovelInfoTableRow: View {
+     private var bookmarkColumn: some View {
+         VStack(spacing: 4) {
+             Image(systemName: resolvedIsBookmarked ? "heart.fill" : "heart")
+-                .foregroundColor(resolvedIsBookmarked ? .red : .secondary)
++                // [Hub] 点亮的心统一用 Pixiv 的收藏红（这里原本是系统红）。
++                .foregroundColor(resolvedIsBookmarked ? PixivPalette.like : .secondary)
+                 .font(.system(size: 18))
+ 
+             Text(resolvedBookmarkSummaryText)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift
+index 8a55983..f293aa3 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift
+@@ -43,7 +43,8 @@ struct NovelSeriesCard: View {
+                     HStack(spacing: 4) {
+                         Image(systemName: isBookmarked ? "heart.fill" : "heart")
+                             .font(.caption2)
+-                            .foregroundColor(isBookmarked ? .red : .secondary)
++                            // [Hub] 点亮的心统一用 Pixiv 的收藏红（这里原本是系统红）。
++                            .foregroundColor(isBookmarked ? PixivPalette.like : .secondary)
+                         Text(NumberFormatter.formatCount(novel.totalBookmarks))
+                             .font(.caption)
+                     }
+diff --git a/Pixiv-SwiftUI/Shared/Components/Profile/UserPreviewCard.swift b/Pixiv-SwiftUI/Shared/Components/Profile/UserPreviewCard.swift
+index 3435f0a..33033ce 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Profile/UserPreviewCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Profile/UserPreviewCard.swift
+@@ -43,7 +43,8 @@ struct UserPreviewCard: View {
+                         } label: {
+                             Image(systemName: isFollowed ? "heart.fill" : "heart")
+                                 .font(.system(size: 16))
+-                                .foregroundColor(isFollowed ? accentColor : .secondary)
++                                // [Hub] 点亮的心用 Pixiv 的收藏红，不跟强调色。
++                                .foregroundColor(isFollowed ? PixivPalette.like : .secondary)
+                                 .frame(width: 32, height: 32)
+                         }
+                         .adaptiveCircularGlassButtonStyle()

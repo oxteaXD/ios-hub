@@ -12,9 +12,11 @@ enum PixivModule {
         title: "Pixiv",
         subtitle: "Pixiv 第三方客户端",
         systemImage: "paintpalette.fill",
-        cardColor: Color(red: 0.0, green: 0.588, blue: 0.98),
-        // 它的强调色由自己的主题设置管理，宿主不干预。
-        accent: nil,
+        cardColor: PixivPalette.brand,
+        // 强调色固定为 Pixiv 官方的品牌蓝（上游的主题色预设已经去掉）。
+        // 上游在各个标签页的内容上用 `.tint(nil)` 回到全局强调色，所以全局强调色也设成了同一个蓝，
+        // 见 project.yml 里的 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME。
+        accent: PixivPalette.brand,
         // 上游工程在 iPhone 上只开放竖屏。
         portraitOnlyOnPhone: true,
         urlSchemes: [],

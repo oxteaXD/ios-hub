@@ -97,9 +97,10 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: HubIcon
-        # 全局强调色沿用 Pixiv 资源目录里的 AccentColor，它的界面因此和上游完全一致；
-        # EhPanda 的强调色由宿主在它的根视图上单独指定。
-        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # 全局强调色是 Pixiv 官方的品牌蓝（宿主资源目录里的 PixivBrand）。Pixiv 的界面在各个标签页的
+        # 内容上会回到全局强调色，所以它必须是全局的；上游自己的 AccentColor 是空的（等于系统蓝），不再使用。
+        # EhPanda 的强调色由宿主在它的根视图上单独指定，不受影响。
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: PixivBrand
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
         # 以下几项照搬 Pixiv-SwiftUI 上游工程的设置：它的源码是按这套编译选项写的。
         SWIFT_VERSION: "6.0"

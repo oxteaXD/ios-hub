@@ -1,0 +1,81 @@
+diff --git a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailImageSection.swift b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailImageSection.swift
+index d29339b..9efa7d5 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailImageSection.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailImageSection.swift
+@@ -186,6 +186,10 @@ struct IllustDetailImageSection: View {
+                     }
+                 }
+                 .tabViewStyle(.page(indexDisplayMode: .never))
++                // [Hub] 图片左侧让出一条不响应翻页的区域：手指从这里右滑是系统的返回，不会被翻页接走。
++                .overlay(alignment: .leading) {
++                    PixivPagerEdgeGuard { openPage(currentPage) }
++                }
+                 #endif
+ 
+                 #if os(macOS)
+diff --git a/Pixiv-SwiftUI/Features/General/IllustDetailNavigation.swift b/Pixiv-SwiftUI/Features/General/IllustDetailNavigation.swift
+index 8b39aa4..ec38214 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustDetailNavigation.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustDetailNavigation.swift
+@@ -261,6 +261,11 @@ struct IllustDetailBrowserView: View {
+ 
+     private let preloadThreshold = 2
+ 
++    #if os(iOS)
++    // [Hub] 左右滑切换作品已经去掉（见 browserBody），为它服务的预取和预加载也随之关掉。
++    private static let hubAdjacentIllustSwipeEnabled = false
++    #endif
++
+     init(illust: Illusts, context: [Illusts] = []) {
+         let target = IllustDetailNavigationTarget(illust: illust, context: context)
+         self.init(target: target)
+@@ -382,26 +387,8 @@ struct IllustDetailBrowserView: View {
+                 macOSIllustNavigationShortcuts
+             }
+             #endif
+-            #if os(iOS)
+-            .background {
+-                IllustDetailRegionSwipeView(
+-                    excludedFrame: currentImageFrame,
+-                    fallbackAspectRatio: currentIllust?.safeAspectRatio ?? 1,
+-                    isMultiPage: isCurrentIllustMultiPage,
+-                    isFirstPage: isCurrentIllustFirstPage,
+-                    isLastPage: isCurrentIllustLastPage,
+-                    onChanged: handleHorizontalDragChanged,
+-                    onEnded: { translation, velocity in
+-                        handleHorizontalDragEnded(
+-                            translation: translation,
+-                            velocity: velocity,
+-                            pageWidth: width
+-                        )
+-                    },
+-                    onCancelled: resetHorizontalDrag
+-                )
+-            }
+-            #endif
++            // [Hub] 已去掉「左右滑切换上一个 / 下一个作品」：这里原本挂着 IllustDetailRegionSwipeView 的
++            // 横向滑动手势。去掉之后横向滑动交还给系统，右滑就是返回。
+             .overlay(alignment: .bottom) {
+                 loadingIndicator
+             }
+@@ -916,6 +903,9 @@ struct IllustDetailBrowserView: View {
+ 
+         ImagePrefetchCoordinator.shared.cancelPending(scope: .detail)
+ 
++        // [Hub] 不能再滑到相邻的作品，不需要预取它们的图片（上面的取消照常执行）。
++        guard Self.hubAdjacentIllustSwipeEnabled else { return }
++
+         let adjacentIllusts = [currentIndex - 1, currentIndex + 1].compactMap { index -> Illusts? in
+             guard context.indices.contains(index) else { return nil }
+             return context[index]
+@@ -943,6 +933,10 @@ struct IllustDetailBrowserView: View {
+     #endif
+ 
+     private func requestMoreIfNeeded() {
++        #if os(iOS)
++        // [Hub] 不能再滑到下一个作品，不需要为它提前加载列表的下一页。
++        guard Self.hubAdjacentIllustSwipeEnabled else { return }
++        #endif
+         guard let currentIndex,
+               context.count - 1 - currentIndex <= preloadThreshold,
+               hasMore?() == true,

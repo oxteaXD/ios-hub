@@ -231,7 +231,139 @@ final class HubUITests: XCTestCase {
         XCTAssertTrue(pixivRotatedBack, "再次进入 Pixiv 后，界面应该转回竖屏")
     }
 
+    /// Pixiv 的颜色预设已经去掉：设置向导的「外观与画质」一步里只剩主题模式，没有「主题强调色」。
+    ///
+    /// 向导不需要登录，也不联网。这个测试停在向导的最后一步，不点「完成设置」，
+    /// 所以别的测试进入 Pixiv 时看到的仍然是向导的第一步。
+    @MainActor
+    func testPixivOnboardingHasNoThemeColorPresets() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "pixiv"])
+        app.launch()
+
+        let switcher = element("hub.switcher", in: app)
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "没有直接进入上次使用的应用")
+        XCTAssertEqual(switcher.value as? String, "Pixiv")
+
+        let start = app.buttons["开始设置"]
+        try XCTSkipUnless(start.waitForExistence(timeout: 30), "没有出现 Pixiv 的设置向导（可能已经走完过）")
+        start.tap()
+
+        // 欢迎 → 网络 → 内容过滤 → 外观与画质。
+        let next = app.buttons["下一步"]
+        XCTAssertTrue(app.staticTexts["步骤 2 / 4"].waitForExistence(timeout: 15), "点「开始设置」后没有进入向导第 2 步")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["步骤 3 / 4"].waitForExistence(timeout: 15), "没有进入向导第 3 步")
+        next.tap()
+        XCTAssertTrue(app.staticTexts["步骤 4 / 4"].waitForExistence(timeout: 15), "没有进入向导第 4 步")
+
+        XCTAssertTrue(app.staticTexts["界面主题模式"].waitForExistence(timeout: 10), "向导第 4 步里没有找到「界面主题模式」")
+        XCTAssertFalse(app.staticTexts["主题强调色"].exists, "向导第 4 步里不应该再有「主题强调色」")
+        report("Pixiv 向导第 4 步", app)
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
+    /// Pixiv 详情页的多图翻页在左侧让出了一条区域（`PixivPagerEdgeGuard`），留给右滑返回。
+    ///
+    /// 详情页要登录才进得去，所以这里用调试构建里的测试页面（`HubProbe`）来验证。它和详情页是同样的
+    /// 结构：导航栈里推入的一页、上下滚动、顶部是左右翻页的图片区，图片区左侧盖着同一个让出区域。
+    @MainActor
+    func testPagerEdgeGuardLeavesLeftStripToBackSwipe() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "pagerEdgeGuard"])
+        app.launch()
+
+        let page = element("probe.page", in: app)
+        let root = element("probe.root", in: app)
+        XCTAssertTrue(page.waitForExistence(timeout: 60), "没有打开翻页测试页面")
+        XCTAssertEqual(page.label, "1")
+        settle(2)
+
+        // 在让出区域以外，翻页照常：从中间向左滑到第 2 页，向右滑回第 1 页，再滑到第 2 页。
+        dragAcrossPager(in: app, from: 0.8, to: 0.15)
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "从图片中间向左滑，没有翻到第 2 页")
+        dragAcrossPager(in: app, from: 0.4, to: 0.95)
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "1" }, "从图片中间向右滑，没有翻回第 1 页")
+        dragAcrossPager(in: app, from: 0.8, to: 0.15)
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "第二次向左滑，没有翻到第 2 页")
+
+        // 轻点：让出区域里的轻点交给它自己的回调（详情页里是打开大图），区域以外的轻点落在图片上。
+        let guardTaps = element("probe.guardTaps", in: app)
+        let imageTaps = element("probe.imageTaps", in: app)
+        pagerPoint(in: app, pointsFromLeft: 22).tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { guardTaps.label == "1" }, "轻点让出区域没有触发它的回调")
+        pagerPoint(in: app, pointsFromLeft: 200).tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { imageTaps.label == "1" }, "轻点让出区域以外的图片，没有触发图片自己的点击")
+        XCTAssertEqual(page.label, "2", "轻点不应该翻页")
+
+        // 从让出区域里向右滑：不能翻页。系统会不会把它当成返回由系统决定，这里只记录。
+        dragRightAcrossPager(in: app, pointsFromLeft: 30)
+        let poppedFromStrip = waitUntil(timeout: 4) { !page.exists }
+        if !poppedFromStrip {
+            XCTAssertEqual(page.label, "2", "从图片左侧让出的区域向右滑，不应该翻页")
+        }
+        print("HUBUI|翻页左侧让出区域|从让出区域里（距左边缘 30 点）右滑：\(poppedFromStrip ? "返回了上一级" : "没有翻页，也没有返回")")
+
+        // 在图片区的高度上，从屏幕最左边缘向右滑：必须能返回上一级。
+        if !poppedFromStrip {
+            dragRightAcrossPager(in: app, pointsFromLeft: 3)
+            XCTAssertTrue(waitUntil(timeout: 10) { !page.exists }, "在翻页区域的高度上从屏幕左边缘右滑，没有返回上一级")
+            print("HUBUI|翻页左侧让出区域|从屏幕左边缘（距左边缘 3 点）右滑：返回了上一级")
+        }
+        XCTAssertTrue(root.waitForExistence(timeout: 10), "返回之后没有回到测试首页")
+
+        // 对照：同样的页面不盖让出区域，从同样的位置右滑会怎样。这是系统自己的行为，只记录，不判定。
+        app.terminate()
+        let bare = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "pagerWithoutGuard"])
+        bare.launch()
+        let barePage = element("probe.page", in: bare)
+        guard barePage.waitForExistence(timeout: 60) else {
+            print("HUBUI|翻页左侧让出区域|对照页面没有打开，跳过对照")
+            return
+        }
+        settle(2)
+        for pointsFromLeft in [CGFloat(30), CGFloat(3)] {
+            guard barePage.exists else { break }
+            if barePage.label != "2" {
+                dragAcrossPager(in: bare, from: 0.8, to: 0.15)
+                guard waitUntil(timeout: 10, { barePage.label == "2" }) else { break }
+            }
+            dragRightAcrossPager(in: bare, pointsFromLeft: pointsFromLeft)
+            settle(3)
+            let outcome: String
+            if !barePage.exists {
+                outcome = "返回了上一级"
+            } else if barePage.label == "1" {
+                outcome = "翻回了第 1 页"
+            } else {
+                outcome = "没有翻页，也没有返回"
+            }
+            print("HUBUI|翻页左侧让出区域|对照（不盖让出区域）从距左边缘 \(Int(pointsFromLeft)) 点处右滑：\(outcome)")
+        }
+    }
+
     // MARK: 辅助方法
+
+    /// 翻页测试页面里图片区上的一个点：距屏幕左边缘 `pointsFromLeft` 点，高度在图片区中间。
+    @MainActor
+    private func pagerPoint(in app: XCUIApplication, pointsFromLeft: CGFloat) -> XCUICoordinate {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.3))
+            .withOffset(CGVector(dx: pointsFromLeft, dy: 0))
+    }
+
+    /// 在图片区上横向拖动，起点和终点用屏幕宽度的比例表示。
+    @MainActor
+    private func dragAcrossPager(in app: XCUIApplication, from: CGFloat, to: CGFloat) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.3))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.3))
+        start.press(forDuration: 0.05, thenDragTo: end)
+    }
+
+    /// 在图片区上从距屏幕左边缘 `pointsFromLeft` 点的地方向右拖到屏幕右侧。
+    @MainActor
+    private func dragRightAcrossPager(in app: XCUIApplication, pointsFromLeft: CGFloat) {
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.3))
+        pagerPoint(in: app, pointsFromLeft: pointsFromLeft).press(forDuration: 0.05, thenDragTo: end)
+    }
 
     @MainActor
     private func makeApp(_ arguments: [String]) -> XCUIApplication {

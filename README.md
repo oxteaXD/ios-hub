@@ -29,6 +29,21 @@
 - **AI 热门。** 主页最底部有一个入口，里面是热门列表里的 AI 作品，和热门页用的是同一份数据：
   热门页去掉 AI，这里只留 AI。
 
+### 对 Pixiv 做的定制
+
+这里的 Pixiv 也不是原样的上游版本（实现见 [patches/pixiv](patches/pixiv) 和
+[PixivPalette.swift](App/Modules/PixivPalette.swift)）：
+
+- **配色固定为 Pixiv 官方配色，没有颜色预设。** 强调色是官方的品牌蓝 `#0096FA`，点亮的心（收藏、关注）
+  是官方的收藏红 `#FF4060`，深色和浅色模式下是同一组值，取自 pixiv.net 网页当前使用的样式。
+  上游设置里的「主题色」（7 个预设加自定义颜色）和设置向导里的「主题强调色」都去掉了，
+  以前保存的主题色选择不再生效；浅色 / 深色模式的选择还在。
+- **详情页的「收藏」按钮**没收藏时是和「查看评论」一样的中性灰，收藏后变成收藏红。
+  上游是两种状态都跟着主题色走。
+- **详情页不能左右滑切换到上一个 / 下一个作品。** 横向滑动交还给系统，右滑就是返回。
+  同一个作品有多张图时，在图片上左右滑翻页的功能还在，但图片左侧让出了 44 点宽的一条：
+  手指从这一条里开始滑不会翻页，留给右滑返回。
+
 ## 得到安装包
 
 本仓库不需要 Mac。每次推送到 `main`，GitHub Actions 会在官方的 `xcode-27` 运行器上编译，
@@ -43,11 +58,15 @@
 
 每次构建还会并行跑一遍**模拟器界面测试**（[HubUITests.swift](UITests/HubUITests.swift)）：
 在 iOS 模拟器里真正点一遍——从启动页进入各个应用、用悬浮按钮返回和切换、长按悬浮按钮直接切换、
-拖动悬浮按钮、启动时直接进入上次使用的应用、收到某个应用的链接时切换过去、Pixiv 在 iPhone 上保持竖屏，
-以及 EhPanda 主页的「AI 热门」入口能打开、从屏幕左边缘右滑能返回。
+拖动悬浮按钮、启动时直接进入上次使用的应用、收到某个应用的链接时切换过去、Pixiv 在 iPhone 上保持竖屏、
+EhPanda 主页的「AI 热门」入口能打开、从屏幕左边缘右滑能返回，以及 Pixiv 设置向导里已经没有「主题强调色」。
 测试结果和启动页、各应用首次启动页上的文字会写进运行摘要。
 
-这个测试不登录，只覆盖启动、切换和页面跳转，浏览、下载这些功能测不到，内容筛选对不对也测不到。
+这个测试不登录，只覆盖启动、切换和页面跳转，浏览、下载这些功能测不到，内容筛选对不对也测不到；
+Pixiv 登录之后才看得到的部分（红心和收藏按钮的颜色、详情页去掉了左右滑切换作品）同样测不到。
+其中「多图翻页的左侧让出一条给右滑返回」是个例外：调试构建里有一个结构相同的测试页面
+（[HubProbe.swift](App/Hub/HubProbe.swift)，安装包里没有），界面测试在它上面验证让出区域以外照常翻页、
+从让出区域里右滑不会翻页、从屏幕左边缘右滑能返回。
 测试会进入 EhPanda 的主页，所以截图和完整的测试日志都不上传，主页上的文字也不记录：
 公开仓库的构建记录和产物谁都能看到。
 
@@ -108,7 +127,7 @@ project.yml             XcodeGen 工程描述（Xcode 工程不入库，构建�
 | 窗口的深浅色设置 | 两边都会直接改窗口，互相串 | 宿主在切换时保存、恢复各自的设置 |
 | Kingfisher 默认下载器 | Pixiv 会把它的配置整个换掉，冲掉 EhPanda 设的 Cookie 和域名前置 | 补丁：Pixiv 改为只调整代理 |
 | EhPanda 的域名前置 | 开启后会接管所有 http/https 请求，Pixiv 的图片请求会被改坏 | 补丁：只接管 E-Hentai 系域名 |
-| 强调色 | 全局只有一个 | 全局沿用 Pixiv 的，EhPanda 的在它的根视图上单独指定 |
+| 强调色 | 全局只有一个 | 全局用 Pixiv 官方的品牌蓝（Pixiv 的界面会回到全局强调色），EhPanda 的在它的根视图上单独指定 |
 | 屏幕方向 | Pixiv 在 iPhone 上只支持竖屏 | 应用代理按当前应用返回允许的方向 |
 | 版本更新提示 | 两边都拿主 bundle 版本和自己上游比较 | 宿主版本号用日期，永远比上游的大 |
 | 偏好设置的键名 | 写进同一个域 | 已核对两边没有重名 |
@@ -137,6 +156,13 @@ EhPanda 是首次进入时才启动的：在那之前它不会改任何全局设
 | EhPanda | `HomeFeature/HubAIPopular.swift` | 顶部大卡片的取法、「AI 热门」入口的界面 | 新增 |
 | Pixiv-SwiftUI | `App/PixivApp.swift` | 去掉 `@main` | 替换 |
 | Pixiv-SwiftUI | `Core/Network/CustomProxyConfiguration.swift` | 调整图片代理时保留下载器的现有配置 | 替换 |
+| Pixiv-SwiftUI | `ThemeManager.swift`、设置和向导的外观页、带心形图标的卡片、插画和小说详情的信息区，共 14 个文件 | 官方配色：强调色固定、去掉颜色预设的入口、点亮的心统一用收藏红、「收藏」按钮的配色 | 补丁文件 |
+| Pixiv-SwiftUI | `IllustDetailNavigation.swift`、`IllustDetailImageSection.swift` | 去掉详情页左右滑切换作品；多图翻页的左侧让出一条给右滑返回 | 补丁文件 |
+
+Pixiv 的源码直接编在宿主的 App target 里，所以配合补丁的新代码不需要复制进上游，
+直接放在 `App/Modules/` 下：[PixivPalette.swift](App/Modules/PixivPalette.swift)（官方配色的数值）
+和 [PixivPagerEdgeGuard.swift](App/Modules/PixivPagerEdgeGuard.swift)（翻页左侧让出的那一条）。
+上游那份颜色预设的数据（`ThemeColors.swift`）没有改动，只是不再被用到，这样以后跟上游更新时补丁不容易对不上。
 
 构建时还会准备两样上游工程以外的东西：
 
@@ -172,6 +198,7 @@ python3 scripts/prepare.py all --dry-run
 - 是 `PATCHES` 里的，对照新代码改 `scripts/prepare.py` 里的定位文字。
 - 是补丁文件，在子模块里照着旧补丁把改动重新做一遍，再用
   `git -C upstream/EhPanda diff > patches/ehpanda/<名字>.patch` 重新导出。
+  一个上游有多个补丁文件时（比如 Pixiv），在命令末尾加上 `-- <这个补丁涉及的文件>`，各导各的。
 
 本机想看补丁打完的效果可以直接运行 `python3 scripts/prepare.py all`，看完用
 `python3 scripts/prepare.py revert` 把子模块恢复原样。
@@ -188,6 +215,8 @@ python3 scripts/prepare.py all --dry-run
 - 同时开启 EhPanda 的域名前置和 Pixiv 的自定义代理时，两者都要改 Kingfisher 默认下载器的配置，
   后改的一方生效时会保留对方的设置，但这个组合没有专门测试过。
 - Pixiv 的 iPad 外接键盘菜单命令没有接入。
+- 全局强调色是 Pixiv 的品牌蓝，所以启动页和 EhPanda 里由系统直接弹出的东西（比如提示框的按钮）
+  也是这个蓝，而不是系统蓝。EhPanda 自己界面上的强调色不受影响。
 - EhPanda 的 AI 作品是靠站点的 `other:ai generated` 标签判断的，没打这个标签的 AI 作品筛不掉。
 - EhPanda 的排行榜在站点那边不支持筛选，AI 作品和被排除的分类是拿到数据之后才去掉的，
   所以每一页显示出来的条数会比 50 少，名次也是去掉之后重新排的。
