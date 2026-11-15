@@ -259,7 +259,9 @@ SCREENS="$(grep -a "HUBUI|" "$LOG" | sed -e 's/^.*HUBUI|//' || true)"
 if [ -n "$SCREENS" ]; then
     note ""
     note "各界面上的文字："
-    echo "$SCREENS" | awk -F'|' '
+    # 用 C 语言环境按字节比较界面名：macOS 的 awk 比较字符串时走语言环境的排序规则，
+    # 而它的 UTF-8 排序规则会把不同的纯中文字符串当成相等，相邻两个纯中文的界面名就被并成了一组。
+    echo "$SCREENS" | LC_ALL=C awk -F'|' '
         $1 != current { current = $1; printf "\n[%s]\n", current }
         { text = $0; sub(/^[^|]*\|/, "", text); printf "    %s\n", text }
     ' | tee -a "$RESULT"
