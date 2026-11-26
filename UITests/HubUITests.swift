@@ -231,6 +231,86 @@ final class HubUITests: XCTestCase {
         XCTAssertTrue(pixivRotatedBack, "再次进入 Pixiv 后，界面应该转回竖屏")
     }
 
+    /// Pica 的代码和依赖库是进入它的时候才载入的。这里从启动页进入 Pica，确认它的登录页出来了、
+    /// 它的提示能显示在宿主的窗口上；再回到启动页进入另外两个应用，确认 Pica 载入之后它们仍然能正常打开
+    /// （Pica 依赖的 QMUIKit 载入后会改写一批系统界面方法，对整个进程生效）。
+    @MainActor
+    func testPicaLoadsOnDemandAndOtherModulesStillWork() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO"])
+        app.launch()
+
+        let picaCard = element("hub.module.pica", in: app)
+        let ehpandaCard = element("hub.module.ehpanda", in: app)
+        let pixivCard = element("hub.module.pixiv", in: app)
+        let switcher = element("hub.switcher", in: app)
+        XCTAssertTrue(picaCard.waitForExistence(timeout: 60), "启动页上没有出现 Pica 的卡片")
+
+        picaCard.tap()
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "进入 Pica 后没有出现悬浮按钮")
+        XCTAssertEqual(switcher.value as? String, "Pica")
+
+        // 没登录时显示的是登录页；载入失败的话宿主会把原因显示出来。
+        let loginButton = app.buttons["登录"]
+        let failure = element("pica.loadFailure", in: app)
+        XCTAssertTrue(
+            waitUntil(timeout: 60) { loginButton.exists || failure.exists },
+            "进入 Pica 后既没有出现登录页，也没有出现载入失败的说明"
+        )
+        if failure.exists {
+            report("Pica 载入失败", app)
+            XCTFail("Pica 没有载入成功，原因见测试结果里的「Pica 载入失败」")
+            return
+        }
+        XCTAssertTrue(app.buttons["注册"].exists, "Pica 的登录页上没有「注册」按钮")
+        settle(2)
+        report("Pica 登录页", app)
+
+        let diagnostics = element("pica.diagnostics", in: app)
+        if waitUntil(timeout: 10, { diagnostics.exists && !diagnostics.label.isEmpty }) {
+            print("HUBUI|Pica 登录页|自检：\(diagnostics.label)")
+            XCTAssertFalse(diagnostics.label.contains("没有找到"), "Pica 用的界面库没有找到宿主的主窗口，它的提示和弹窗会显示不出来")
+        } else {
+            print("HUBUI|Pica 登录页|没有读到自检信息")
+        }
+
+        // 不填账号密码直接点登录，Pica 会弹出一条提示。提示是它的界面库加在主窗口上的，能出来说明这条路是通的。
+        loginButton.tap()
+        let tip = app.staticTexts["请输入账号或者密码"]
+        XCTAssertTrue(tip.waitForExistence(timeout: 10), "点「登录」后没有出现 Pica 的提示")
+        print("HUBUI|Pica 登录页|不填账号密码点「登录」：出现了提示「请输入账号或者密码」")
+        settle(3)
+
+        // 回到启动页，依次进入另外两个应用：Pica 已经载入，它们应当照常打开。
+        switcher.tap()
+        XCTAssertTrue(ehpandaCard.waitForExistence(timeout: 30), "从 Pica 轻点悬浮按钮后没有回到启动页")
+
+        ehpandaCard.tap()
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "Pica 载入之后进入 EhPanda，没有出现悬浮按钮")
+        XCTAssertEqual(switcher.value as? String, "EhPanda")
+        let ehpandaReady = waitUntil(timeout: 60) {
+            self.element("first_launch_declaration", in: app).exists || self.element("home_ai_popular_entry", in: app).exists
+        }
+        XCTAssertTrue(ehpandaReady, "Pica 载入之后进入 EhPanda，既没有出现成年确认页，也没有出现主页")
+        print("HUBUI|Pica 载入之后|EhPanda 正常打开")
+
+        switcher.tap()
+        XCTAssertTrue(pixivCard.waitForExistence(timeout: 30), "从 EhPanda 轻点悬浮按钮后没有回到启动页")
+        pixivCard.tap()
+        XCTAssertTrue(switcher.waitForExistence(timeout: 60), "Pica 载入之后进入 Pixiv，没有出现悬浮按钮")
+        XCTAssertEqual(switcher.value as? String, "Pixiv")
+        XCTAssertTrue(app.buttons["开始设置"].waitForExistence(timeout: 60), "Pica 载入之后进入 Pixiv，没有出现它的设置向导")
+        print("HUBUI|Pica 载入之后|Pixiv 正常打开")
+
+        // 再回到 Pica：界面还是原来那一个，不会重新载入。
+        switcher.tap()
+        XCTAssertTrue(picaCard.waitForExistence(timeout: 30), "从 Pixiv 轻点悬浮按钮后没有回到启动页")
+        picaCard.tap()
+        XCTAssertTrue(loginButton.waitForExistence(timeout: 30), "第二次进入 Pica 没有出现登录页")
+        print("HUBUI|Pica 载入之后|第二次进入 Pica：登录页还在")
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
     /// Pixiv 的颜色预设已经去掉：设置向导的「外观与画质」一步里只剩主题模式，没有「主题强调色」。
     ///
     /// 向导不需要登录，也不联网。这个测试停在向导的最后一步，不点「完成设置」，
@@ -402,7 +482,7 @@ final class HubUITests: XCTestCase {
     /// 截一张图存进测试结果，并把屏幕上的文字打印出来。
     /// 悬浮按钮在场时，还会报告它的位置，以及它有没有压在别的按钮上。
     ///
-    /// EhPanda 过了成年确认页之后的界面是站点内容，不截图也不打印：
+    /// EhPanda 过了成年确认页之后、Pica 登录之后的界面是站点内容，不截图也不打印：
     /// 这些测试结果会出现在公开仓库的构建记录里。
     @MainActor
     private func report(_ name: String, _ app: XCUIApplication) {
@@ -412,6 +492,13 @@ final class HubUITests: XCTestCase {
             || element("first_launch_analytics_title", in: app).exists
         if isInEhPanda && !isOnFirstLaunchPages {
             print("HUBUI|\(name)|（已经在 EhPanda 的内容页面里，不截图也不记录文字）")
+            return
+        }
+        // Pica 同理：登录之后看到的是站点内容。没登录时只有登录页（或者载入失败的说明），可以记录。
+        let isInPica = switcher.exists && (switcher.value as? String) == "Pica"
+        let isOnPicaStaticPages = app.buttons["登录"].exists || element("pica.loadFailure", in: app).exists
+        if isInPica && !isOnPicaStaticPages {
+            print("HUBUI|\(name)|（已经在 Pica 的内容页面里，不截图也不记录文字）")
             return
         }
 

@@ -63,8 +63,10 @@ final class HubState {
         // 两个子应用都会直接改窗口的深浅色设置。离开时记下来、进入时恢复，彼此才不会串。
         windowStyles[styleKey(for: activeModuleID)] = HubWindowCoordinator.currentInterfaceStyle()
         // 先换成目标模块上次留下的外观再启动它：模块启动时自己套用的外观才不会被旧值盖掉。
+        // 固定了深浅色的模块（比如只有浅色界面的 Pica）不看上次留下的值，每次都用它固定的那个。
         HubWindowCoordinator.apply(
-            interfaceStyle: windowStyles[styleKey(for: target?.id)] ?? .unspecified,
+            interfaceStyle: target?.interfaceStyle ?? windowStyles[styleKey(for: target?.id)] ?? .unspecified,
+            fixedForScene: target?.interfaceStyle,
             tint: target?.accent
         )
 
@@ -93,9 +95,13 @@ final class HubState {
 
     // MARK: 系统事件
 
-    /// 窗口出现后调用一次：启动时直接进入模块的情况下，那时窗口还不存在，强调色和方向要补设。
+    /// 窗口出现后调用一次：启动时直接进入模块的情况下，那时窗口还不存在，强调色、固定的深浅色和方向要补设。
     func syncWindowAppearance() {
-        HubWindowCoordinator.apply(tint: activeModule?.accent)
+        if let style = activeModule?.interfaceStyle {
+            HubWindowCoordinator.apply(interfaceStyle: style, fixedForScene: style, tint: activeModule?.accent)
+        } else {
+            HubWindowCoordinator.apply(tint: activeModule?.accent)
+        }
         HubWindowCoordinator.refreshSupportedOrientations()
     }
 

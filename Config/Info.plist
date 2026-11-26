@@ -148,8 +148,24 @@
 	<!-- EhPanda：下载目录在「文件」App 里可见。 -->
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<!-- Pica：聊天里拍照和发语音、上传头像、本地验证、语音转文字。上游的说明文字只说了它自己，这里写明是哪个应用要用。 -->
+	<key>NSCameraUsageDescription</key>
+	<string>Pica：拍照发送图片、更换头像时需要使用相机。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Pica：开启本地验证后，用面容 ID 解锁。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pica：在聊天室发送语音时需要使用麦克风。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>需要访问相册以保存图片</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pica：发送图片或更换头像时需要访问相册。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Pica：把聊天里的语音消息转成文字。</string>
+	<!-- Pica：界面上的图标是用图标字体画的。 -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>iconfont.ttf</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -157,10 +173,11 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<!-- EhPanda：后台续传。上游注明这一项是有意保留的。 -->
+	<!-- processing：EhPanda 的后台续传，上游注明这一项是有意保留的。audio：Pica 聊天里的语音消息在切到后台后继续播放。 -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
+		<string>audio</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
@@ -170,7 +187,7 @@
 	<array>
 		<string>arm64</string>
 	</array>
-	<!-- 这里列出全部方向；Pixiv 在 iPhone 上只允许竖屏，由 HubAppDelegate 在运行时限制。 -->
+	<!-- 这里列出全部方向；Pixiv 和 Pica 在 iPhone 上只允许竖屏，由 HubAppDelegate 在运行时限制。 -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

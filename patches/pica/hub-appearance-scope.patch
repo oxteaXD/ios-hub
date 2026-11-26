@@ -1,0 +1,40 @@
+diff --git a/Pica/Common/Configuration/QMUIConfigurationTemplateDefault.m b/Pica/Common/Configuration/QMUIConfigurationTemplateDefault.m
+index bd521d7..8189b3e 100644
+--- a/Pica/Common/Configuration/QMUIConfigurationTemplateDefault.m
++++ b/Pica/Common/Configuration/QMUIConfigurationTemplateDefault.m
+@@ -19,6 +19,11 @@ static UIImage *disclosureIndicatorImageDark;
+ #pragma mark - <QMUIConfigurationTemplateProtocol>
+ 
+ - (void)applyConfigurationTemplate {
++    // [Hub] 先定下导航栏、标签栏、工具栏外观的生效范围，再设下面的各项。QMUI 每设一项就会立刻套用一次外观，
++    // 范围留到最后才设的话，前面那些会先落到全局外观上，影响同一进程里其他应用的导航栏和标签栏。
++    QMUICMI.navBarContainerClasses = @[QMUINavigationController.class];
++    QMUICMI.tabBarContainerClasses = @[QMUITabBarViewController.class];
++    QMUICMI.toolBarContainerClasses = @[QMUINavigationController.class];
+     
+     if (!disclosureIndicatorImage) disclosureIndicatorImage = [UIImage qmui_imageWithShape:QMUIImageShapeDisclosureIndicator size:CGSizeMake(6, 10) lineWidth:1 tintColor:UIColorGray7];
+     if (!disclosureIndicatorImageDark) disclosureIndicatorImageDark = [UIImage qmui_imageWithShape:QMUIImageShapeDisclosureIndicator size:CGSizeMake(6, 10) lineWidth:1 tintColor:UIColorMake(98, 100, 104)];
+@@ -83,8 +88,8 @@ static UIImage *disclosureIndicatorImageDark;
+     QMUICMI.keyboardAppearance = UIKeyboardAppearanceDefault;                   // KeyboardAppearance : UITextView、UITextField、UISearchBar 的 keyboardAppearance
+ 
+ #pragma mark - UISwitch
+-    QMUICMI.switchOnTintColor = UIColor.pc_tintColor;                           // SwitchOnTintColor : UISwitch 打开时的背景色（除了圆点外的其他颜色）
+-    QMUICMI.switchOffTintColor =  UIColor.pc_separatorColor;                    // SwitchOffTintColor : UISwitch 关闭时的背景色（除了圆点外的其他颜色）
++    QMUICMI.switchOnTintColor = nil; // [Hub] 不设全局的开关颜色（会影响同一进程里的其他应用），Pica 自己的开关颜色由 PCHubHost 指定。
++    QMUICMI.switchOffTintColor = nil; // [Hub] 同上。
+     QMUICMI.switchThumbTintColor = nil;                                         // SwitchThumbTintColor : UISwitch 中间的操控圆点的颜色
+     
+ #pragma mark - NavigationBar
+@@ -293,9 +298,9 @@ static UIImage *disclosureIndicatorImageDark;
+     QMUICMI.shouldFixTabBarSafeAreaInsetsBug = YES;                             // ShouldFixTabBarSafeAreaInsetsBug : 是否要对 iOS 11 及以后的版本修复当存在 UITabBar 时，UIScrollView 的 inset.bottom 可能错误的 bug（issue #218 #934），默认为 YES
+     QMUICMI.shouldFixSearchBarMaskViewLayoutBug = YES;                          // ShouldFixSearchBarMaskViewLayoutBug : 是否自动修复 UISearchController.searchBar 被当作 tableHeaderView 使用时可能出现的布局 bug(issue #950)
+     QMUICMI.dynamicPreferredValueForIPad = NO;                                  // DynamicPreferredValueForIPad : 当 iPad 处于 Slide Over 或 Split View 分屏模式下，宏 `PreferredValueForXXX` 是否把 iPad 视为某种屏幕宽度近似的 iPhone 来取值。
+-    QMUICMI.navBarContainerClasses = nil; // NavBarContainerClasses : NavigationBar 系列开关被用于 UIAppearance 时的生效范围（默认情况下除了用于 UIAppearance 外，还用于实现了 QMUINavigationControllerAppearanceDelegate 的 UIViewController），默认为 nil。当赋值为 nil 或者空数组时等效于 @[UINavigationController.class]，也即对所有 UINavigationBar 生效，包括系统的通讯录（ContactsUI.framework)、打印等。当值不为空时，获取 UINavigationBar 的 appearance 请使用 UINavigationBar.qmui_appearanceConfigured 方法代替系统的 UINavigationBar.appearance。请保证这个配置项先于其他任意 NavBar 配置项执行。
+-    QMUICMI.tabBarContainerClasses = nil; // TabBarContainerClasses : TabBar 系列开关的生效范围，默认为 nil，当赋值为 nil 或者空数组时等效于 @[UITabBarController.class]，也即对所有 UITabBar 生效。当值不为空时，获取 UITabBar 的 appearance 请使用 UITabBar.qmui_appearanceConfigured 方法代替系统的 UITabBar.appearance。请保证这个配置项先于其他任意 TabBar 配置项执行。
+-    QMUICMI.toolBarContainerClasses = nil; // ToolBarContainerClasses : ToolBar 系列开关的生效范围，默认为 nil，当赋值为 nil 或者空数组时等效于 @[UINavigationController.class]，也即对所有 UIToolbar 生效。当值不为空时，获取 UIToolbar 的 appearance 请使用 UIToolbar.qmui_appearanceConfigured 方法代替系统的 UIToolbar.appearance。请保证这个配置项先于其他任意 ToolBar 配置项执行。
++    QMUICMI.navBarContainerClasses = @[QMUINavigationController.class]; // [Hub] 导航栏外观只对 Pica（QMUI）的导航控制器生效，不动同一进程里其他应用的导航栏。
++    QMUICMI.tabBarContainerClasses = @[QMUITabBarViewController.class]; // [Hub] 同上，标签栏外观只对 Pica 的标签栏控制器生效。
++    QMUICMI.toolBarContainerClasses = @[QMUINavigationController.class]; // [Hub] 同上，工具栏外观只对 Pica 的导航控制器生效。
+     if (@available(iOS 13.0, *)) {
+         QMUICMI.ignoreKVCAccessProhibited = NO;                                     // IgnoreKVCAccessProhibited : 是否全局忽略 iOS 13 对 KVC 访问 UIKit 私有属性的限制
+         QMUICMI.adjustScrollIndicatorInsetsByContentInsetAdjustment = YES;          // AdjustScrollIndicatorInsetsByContentInsetAdjustment : 当将 UIScrollView.contentInsetAdjustmentBehavior 设为 UIScrollViewContentInsetAdjustmentNever 时，是否自动将 UIScrollView.automaticallyAdjustsScrollIndicatorInsets 设为 NO，以保证原本在 iOS 12 下的代码不用修改就能在 iOS 13 下正常控制滚动条的位置。

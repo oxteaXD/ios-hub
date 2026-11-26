@@ -1,0 +1,114 @@
+diff --git a/Pica/Chat/NewChat/Request/PCNewChatBaseRequest.m b/Pica/Chat/NewChat/Request/PCNewChatBaseRequest.m
+index e15b5dc..b348ab4 100644
+--- a/Pica/Chat/NewChat/Request/PCNewChatBaseRequest.m
++++ b/Pica/Chat/NewChat/Request/PCNewChatBaseRequest.m
+@@ -10,7 +10,8 @@
+ #import <QMUIKit/QMUIKit.h>
+ #import <YYModel/YYModel.h>
+ #import "NSString+PCAdd.h"
+-#import "AppDelegate.h"
++// [Hub] 窗口归宿主所有，切换登录页和主界面改为通过 PCHubHost（原来是通过 AppDelegate）。
++#import "PCHubHost.h"
+ #import "PCDefineHeader.h"
+ 
+ @implementation PCNewChatBaseRequest
+@@ -40,7 +41,7 @@
+                     [response[@"message"] isEqualToString:@"unauthorized"] &&
+                     [response[@"code"] integerValue] == 401) {
+                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+-                        [(AppDelegate *)[UIApplication sharedApplication].delegate setRootViewControllerToLogin];
++                        [PCHubHost.sharedHost setRootViewControllerToLogin]; // [Hub]
+                     });
+                 }
+ #if defined(DEBUG)
+diff --git a/Pica/Common/Request/PCRequest.m b/Pica/Common/Request/PCRequest.m
+index 5f9793b..cb243f8 100644
+--- a/Pica/Common/Request/PCRequest.m
++++ b/Pica/Common/Request/PCRequest.m
+@@ -10,7 +10,8 @@
+ #import <QMUIKit/QMUIKit.h>
+ #import <YYModel/YYModel.h>
+ #import "NSString+PCAdd.h"
+-#import "AppDelegate.h"
++// [Hub] 窗口归宿主所有，切换登录页和主界面改为通过 PCHubHost（原来是通过 AppDelegate）。
++#import "PCHubHost.h"
+ #import "PCDefineHeader.h"
+ 
+ #define PC_API_KEY_IOS       @"2587EFC6F859B4E3A1D8B6D33B272"
+@@ -100,7 +101,7 @@ static NSString *appuuid;
+                     [response[@"message"] isEqualToString:@"unauthorized"] &&
+                     [response[@"code"] integerValue] == 401) {
+                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+-                        [(AppDelegate *)[UIApplication sharedApplication].delegate setRootViewControllerToLogin];
++                        [PCHubHost.sharedHost setRootViewControllerToLogin]; // [Hub]
+                     });
+                 }
+ #if defined(DEBUG)
+diff --git a/Pica/Login/Controller/PCLoginController.m b/Pica/Login/Controller/PCLoginController.m
+index e0e3bf3..9184a39 100644
+--- a/Pica/Login/Controller/PCLoginController.m
++++ b/Pica/Login/Controller/PCLoginController.m
+@@ -10,7 +10,8 @@
+ #import "PCLoginController.h"
+ #import "PCRegistController.h"
+ #import "PCNavigationController.h"
+-#import "AppDelegate.h"
++// [Hub] 窗口归宿主所有，切换登录页和主界面改为通过 PCHubHost（原来是通过 AppDelegate）。
++#import "PCHubHost.h"
+ 
+ @interface PCLoginController ()
+ 
+@@ -83,8 +84,7 @@
+             PCLoginRequest *request = [[PCLoginRequest alloc] initWithAccount:account password:password];
+             [request sendRequest:^(id  _Nonnull response) {
+                 [loading hideAnimated:NO];
+-                AppDelegate *appDelegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+-                [appDelegate setRootViewControllerToTab];
++                [PCHubHost.sharedHost setRootViewControllerToTab]; // [Hub]
+                 !self.loginBlock ? : self.loginBlock(NO);
+             } failure:^(NSError * _Nonnull error) {
+                 [loading hideAnimated:NO];
+diff --git a/Pica/Setting/Controller/PCSettingController.m b/Pica/Setting/Controller/PCSettingController.m
+index 1b623a3..dc7329c 100644
+--- a/Pica/Setting/Controller/PCSettingController.m
++++ b/Pica/Setting/Controller/PCSettingController.m
+@@ -10,7 +10,8 @@
+ #import "PCSettingController.h"
+ #import "PCPasswordSetRequest.h"
+ #import "PCNameSetRequest.h"
+-#import "AppDelegate.h"
++// [Hub] 窗口归宿主所有，切换登录页和主界面改为通过 PCHubHost（原来是通过 AppDelegate）。
++#import "PCHubHost.h"
+ #import "PCTabBarViewController.h"
+ #import "PCChatMessage.h"
+ #import "PCChatSettingController.h"
+@@ -246,8 +247,7 @@
+ - (void)showLogoutAlert {
+     QMUIAlertAction *action1 = [QMUIAlertAction actionWithTitle:@"确定" style:QMUIAlertActionStyleDefault handler:^(__kindof QMUIAlertController *aAlertController, QMUIAlertAction *action) {
+         [kPCUserDefaults removeObjectForKey:PC_AUTHORIZATION_TOKEN];
+-        AppDelegate *delegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+-        [delegate setRootViewControllerToLogin];
++        [PCHubHost.sharedHost setRootViewControllerToLogin]; // [Hub]
+     }];
+     
+     QMUIAlertAction *action2 = [QMUIAlertAction actionWithTitle:@"取消" style:QMUIAlertActionStyleCancel handler:nil];
+@@ -321,7 +321,8 @@
+     } else if (indexPath.row == 5) {
+         [kPCUserDefaults setBool:sender.isOn forKey:PC_TAB_GAME_HIDDEN];
+         
+-        PCTabBarViewController *tabBarViewController = (PCTabBarViewController *)[UIApplication sharedApplication].delegate.window.rootViewController;
++        // [Hub] 宿主窗口的根控制器不是 Pica 的主界面，改为向 PCHubHost 要。
++        PCTabBarViewController *tabBarViewController = PCHubHost.sharedHost.currentTabBarController;
+         [tabBarViewController reloadViewControllers];
+     } else if (indexPath.row == 6) {
+         [kPCUserDefaults setBool:sender.isOn forKey:PC_LOCAL_AUTHORIZATION];
+@@ -353,8 +354,7 @@
+             [loading hideAnimated:YES];
+             QMUIAlertAction *action1 = [QMUIAlertAction actionWithTitle:@"确定" style:QMUIAlertActionStyleDefault handler:^(__kindof QMUIAlertController *aAlertController, QMUIAlertAction *action) {
+                 [kPCUserDefaults removeObjectForKey:PC_AUTHORIZATION_TOKEN];
+-                AppDelegate *delegate = (AppDelegate *)[UIApplication sharedApplication].delegate;
+-                [delegate setRootViewControllerToLogin];
++                [PCHubHost.sharedHost setRootViewControllerToLogin]; // [Hub]
+             }];
+               
+             QMUIAlertController *alertController = [QMUIAlertController alertControllerWithTitle:@"修改ID成功" message:@"请使用新email重新登录" preferredStyle:QMUIAlertControllerStyleAlert];

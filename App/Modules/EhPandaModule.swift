@@ -46,6 +46,7 @@ enum EhPandaModule {
         cardColor: Color("EhPandaAccent"),
         // 上游用的是壳工程资源目录里的全局强调色，这里改成只对它自己的界面生效。
         accent: Color("EhPandaAccent"),
+        interfaceStyle: nil,
         portraitOnlyOnPhone: false,
         urlSchemes: ["ehpanda"],
         start: {

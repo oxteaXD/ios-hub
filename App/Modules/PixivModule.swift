@@ -17,6 +17,8 @@ enum PixivModule {
         // 上游在各个标签页的内容上用 `.tint(nil)` 回到全局强调色，所以全局强调色也设成了同一个蓝，
         // 见 project.yml 里的 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME。
         accent: PixivPalette.brand,
+        // 深浅色由它自己的「外观」设置管理。
+        interfaceStyle: nil,
         // 上游工程在 iPhone 上只开放竖屏。
         portraitOnlyOnPhone: true,
         urlSchemes: [],

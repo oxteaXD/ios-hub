@@ -125,6 +125,28 @@ if [ -n "$MISSING" ]; then
     ls "$APP"
 fi
 
+# Pica 的代码和它的依赖库是按需载入的动态框架。两件事要保证：它们都在安装包里；主程序没有直接链接它们。
+# 链接了的话它们会随 App 启动一起载入，QMUIKit 对系统界面方法的改写就会波及另外两个应用。
+PICA_FRAMEWORKS="PicaKit AFNetworking FMDB GYDataCenter JXPagingView MJRefresh QMUIKit SDWebImage SDWebImageVideoCoder SSZipArchive SocketRocket YTKNetwork YYModel"
+for name in $PICA_FRAMEWORKS; do
+    if [ ! -f "${APP}/Frameworks/${name}.framework/${name}" ]; then
+        echo "构建产物里缺少 Frameworks/${name}.framework，Pica 会打不开。Frameworks 目录里现有："
+        ls "${APP}/Frameworks" 2>/dev/null || echo "（没有 Frameworks 目录）"
+        exit 1
+    fi
+done
+# 主程序启动时就要载入的内嵌框架（install name 以 @rpath/ 开头的那些）。
+LINKED_AT_LAUNCH="$(xcrun otool -L "${APP}/${SCHEME}" | awk '$1 ~ /^@rpath\// {print $1}' | sed -e 's#^@rpath/##' | tr '\n' ' ')"
+for name in $PICA_FRAMEWORKS; do
+    case " ${LINKED_AT_LAUNCH}" in
+        *"/${name} "*)
+            echo "主程序直接链接了 ${name}：它会随 App 启动一起载入，而不是进入 Pica 时才载入"
+            exit 1
+            ;;
+    esac
+done
+echo "  Pica 的 13 个框架都在安装包里，主程序没有直接链接它们"
+
 (cd build && zip -qry "${SCHEME}.ipa" Payload)
 
 SIZE_MB="$(du -m "$IPA" | cut -f1)"
@@ -171,7 +193,8 @@ CONTENTS="build/contents.txt"
     printf '%s\n' "$COLOR_NAMES" | sed -e 's/^/    /'
     echo "资源包（.bundle）：$(find "$APP" -maxdepth 1 -name '*.bundle' | wc -l | tr -d ' ') 个"
     echo "语言目录（.lproj）：$(find "$APP" -maxdepth 1 -name '*.lproj' -exec basename {} .lproj \; | sort | tr '\n' ' ')"
-    echo "内嵌框架：$(find "${APP}/Frameworks" -maxdepth 1 -mindepth 1 2>/dev/null | wc -l | tr -d ' ') 个"
+    echo "内嵌框架：$(find "${APP}/Frameworks" -maxdepth 1 -mindepth 1 2>/dev/null | wc -l | tr -d ' ') 个（$(find "${APP}/Frameworks" -maxdepth 1 -mindepth 1 -exec basename {} .framework \; 2>/dev/null | sort | tr '\n' ' ')）"
+    echo "其中主程序启动时就载入的：${LINKED_AT_LAUNCH:-没有}（Pica 的框架应当都不在这里，它们进入 Pica 时才载入）"
     echo
     echo "顶层文件："
     ls -1 "$APP"

@@ -5,6 +5,8 @@
 #     Pixiv-SwiftUI 上游是单一 App target，它的图片、文案、标签数据都从主 bundle 里找，
 #     所以直接编进 App target，资源查找和上游完全一样。
 #   - EhPanda 上游已经拆成本地 Swift 包，这里只链接它的 AppFeature 产品，命名空间天然隔离。
+#   - PicaKit（framework target）= Pica 的全部 Objective-C 源码 + 宿主写的胶水层（PicaKit/）。
+#     它和它的依赖库都只放进安装包、不被主程序链接，第一次进入 Pica 时才载入，原因见 App/Modules/PicaModule.swift。
 #
 # 生成工程前必须先运行 `python3 scripts/prepare.py all`（打补丁、注入桥接文件、准备 tags.json）。
 
@@ -29,6 +31,13 @@ settings:
       # 不生成 dSYM，缩短云端构建时间。
       DEBUG_INFORMATION_FORMAT: dwarf
       DEPLOYMENT_POSTPROCESSING: YES
+
+# Pica 的依赖库。上游把 CocoaPods 生成的工程和各依赖库的源码都提交在仓库里，这里直接引用这个工程：
+# 构建时不需要安装 CocoaPods，也不需要联网下载，用到的版本和上游完全一致。
+# 其中友盟的三个库（统计和性能监控）没有用，见 PicaKit/Stubs。
+projectReferences:
+  PicaPods:
+    path: upstream/Pica/Pods/Pods.xcodeproj
 
 packages:
   AppPackage:
@@ -70,6 +79,9 @@ targets:
       # 由 scripts/prepare.py 从上游壳工程的资源目录里抽出来，不带那里面的 AccentColor。
       - path: generated/EhPandaAssets.xcassets
         buildPhase: resources
+      # Pica 的图标字体和聊天里用到的几张图片。它的代码从主 bundle 里找这些资源，所以放在这里而不是 PicaKit 里。
+      - path: upstream/Pica/Pica/Resource
+        buildPhase: resources
     dependencies:
       - package: AppPackage
         product: AppFeature
@@ -81,6 +93,14 @@ targets:
         product: Gzip
       - package: ZIPFoundation
         product: ZIPFoundation
+      # Pica：只放进安装包，不链接。链接了的话它会随 App 启动一起载入。
+      - target: PicaKit
+        link: false
+        embed: true
+    postBuildScripts:
+      - name: 放入 Pica 的依赖库
+        path: scripts/embed_pica_frameworks.sh
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_NAME: Hub
@@ -102,6 +122,8 @@ targets:
         # EhPanda 的强调色由宿主在它的根视图上单独指定，不受影响。
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: PixivBrand
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+        # 「放入 Pica 的依赖库」那个脚本要读别的目标的产物、写安装包目录，沙盒里做不了。
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         # 以下几项照搬 Pixiv-SwiftUI 上游工程的设置：它的源码是按这套编译选项写的。
         SWIFT_VERSION: "6.0"
         SWIFT_APPROACHABLE_CONCURRENCY: YES
@@ -116,6 +138,146 @@ targets:
       configs:
         Release:
           SWIFT_COMPILATION_MODE: wholemodule
+
+  # Pica（哔咔漫画客户端）。上游是 Objective-C 写的单一 App target，这里把它的源码编成一个动态框架。
+  # 上游的程序入口（main.m、AppDelegate、故事板）不用，由 PicaKit/Host 里的 PCHubHost 代替。
+  PicaKit:
+    type: framework
+    platform: iOS
+    sources:
+      - path: upstream/Pica/Pica
+        # 头文件只在这个目标内部用，不随框架一起导出。
+        headerVisibility: project
+        excludes:
+          - "Application"
+          - "Application/**"
+          - "Base.lproj"
+          - "Base.lproj/**"
+          - "Info.plist"
+          # 上游自己的图标和强调色，宿主用不到。
+          - "Assets.xcassets"
+          - "Assets.xcassets/**"
+          # 资源放在 Hub 目标里（见上）。
+          - "Resource"
+          - "Resource/**"
+      - path: PicaKit
+        headerVisibility: project
+    dependencies:
+      # 只用来保证先后顺序：这些库编好之后才编 PicaKit。链接和搜索路径在下面的设置里写明，
+      # 因为 Pods 工程把每个库的产物放在各自的子目录里，不在 Xcode 默认去找的位置。
+      - target: PicaPods/AFNetworking
+        link: false
+        embed: false
+      - target: PicaPods/FMDB
+        link: false
+        embed: false
+      - target: PicaPods/GYDataCenter
+        link: false
+        embed: false
+      - target: PicaPods/JXPagingView
+        link: false
+        embed: false
+      - target: PicaPods/MJRefresh
+        link: false
+        embed: false
+      - target: PicaPods/QMUIKit
+        link: false
+        embed: false
+      - target: PicaPods/SDWebImage
+        link: false
+        embed: false
+      - target: PicaPods/SDWebImageVideoCoder
+        link: false
+        embed: false
+      - target: PicaPods/SSZipArchive
+        link: false
+        embed: false
+      - target: PicaPods/SocketRocket
+        link: false
+        embed: false
+      - target: PicaPods/YTKNetwork
+        link: false
+        embed: false
+      - target: PicaPods/YYModel
+        link: false
+        embed: false
+    settings:
+      base:
+        PRODUCT_NAME: PicaKit
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hubapp.Hub.PicaKit
+        GENERATE_INFOPLIST_FILE: YES
+        # 没有对外的头文件，不需要模块描述。
+        DEFINES_MODULE: NO
+        CLANG_ENABLE_MODULES: YES
+        CLANG_ENABLE_OBJC_ARC: YES
+        CLANG_ENABLE_OBJC_WEAK: YES
+        # 以下两项照搬上游 App 目标的设置。
+        GCC_C_LANGUAGE_STANDARD: gnu11
+        ENABLE_STRICT_OBJC_MSGSEND: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        # 和 CocoaPods 给上游 App 目标的设置保持一致。
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - "$(inherited)"
+          - "COCOAPODS=1"
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(BUILT_PRODUCTS_DIR)/AFNetworking"
+          - "$(BUILT_PRODUCTS_DIR)/FMDB"
+          - "$(BUILT_PRODUCTS_DIR)/GYDataCenter"
+          - "$(BUILT_PRODUCTS_DIR)/JXPagingView"
+          - "$(BUILT_PRODUCTS_DIR)/MJRefresh"
+          - "$(BUILT_PRODUCTS_DIR)/QMUIKit"
+          - "$(BUILT_PRODUCTS_DIR)/SDWebImage"
+          - "$(BUILT_PRODUCTS_DIR)/SDWebImageVideoCoder"
+          - "$(BUILT_PRODUCTS_DIR)/SSZipArchive"
+          - "$(BUILT_PRODUCTS_DIR)/SocketRocket"
+          - "$(BUILT_PRODUCTS_DIR)/YTKNetwork"
+          - "$(BUILT_PRODUCTS_DIR)/YYModel"
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          # 友盟统计的空实现，上游按 <UMCommon/MobClick.h> 的写法引用。
+          - "$(SRCROOT)/PicaKit/Stubs"
+          - "$(BUILT_PRODUCTS_DIR)/AFNetworking/AFNetworking.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/FMDB/FMDB.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/GYDataCenter/GYDataCenter.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/JXPagingView/JXPagingView.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/MJRefresh/MJRefresh.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/QMUIKit/QMUIKit.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/SDWebImage/SDWebImage.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/SDWebImageVideoCoder/SDWebImageVideoCoder.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/SSZipArchive/SSZipArchive.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/SocketRocket/SocketRocket.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/YTKNetwork/YTKNetwork.framework/Headers"
+          - "$(BUILT_PRODUCTS_DIR)/YYModel/YYModel.framework/Headers"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-framework"
+          - "AFNetworking"
+          - "-framework"
+          - "FMDB"
+          - "-framework"
+          - "GYDataCenter"
+          - "-framework"
+          - "JXPagingView"
+          - "-framework"
+          - "MJRefresh"
+          - "-framework"
+          - "QMUIKit"
+          - "-framework"
+          - "SDWebImage"
+          - "-framework"
+          - "SDWebImageVideoCoder"
+          - "-framework"
+          - "SSZipArchive"
+          - "-framework"
+          - "SocketRocket"
+          - "-framework"
+          - "YTKNetwork"
+          - "-framework"
+          - "YYModel"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @loader_path/Frameworks"
 
   # 宿主壳的界面测试，只在模拟器上跑（见 scripts/smoke_test.sh），不进安装包。
   HubUITests:

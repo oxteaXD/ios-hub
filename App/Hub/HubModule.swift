@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 宿主里的一个子应用。
 ///
@@ -13,6 +14,9 @@ struct HubModule: Identifiable {
     let cardColor: Color
     /// 模块自己的强调色；为 nil 时沿用全局强调色。
     let accent: Color?
+    /// 模块固定使用的深浅色。只有浅色（或只有深色）界面、自己又不管理窗口外观的模块填这一项，
+    /// 宿主在它显示期间把整个场景固定成这个外观；为 nil 时由模块自己管理，宿主只负责切换时保存和恢复。
+    let interfaceStyle: UIUserInterfaceStyle?
     /// 在 iPhone 上是否只允许竖屏，与模块上游工程的设置保持一致。
     let portraitOnlyOnPhone: Bool
     /// 属于这个模块的 URL scheme（小写）。收到这类链接时宿主会先切到该模块。
@@ -29,5 +33,6 @@ enum HubModuleRegistry {
     static let all: [HubModule] = [
         EhPandaModule.descriptor,
         PixivModule.descriptor,
+        PicaModule.descriptor,
     ]
 }

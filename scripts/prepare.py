@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent
 UPSTREAM = ROOT / "upstream"
 EHPANDA = UPSTREAM / "EhPanda"
 PIXIV = UPSTREAM / "Pixiv-SwiftUI"
+PICA = UPSTREAM / "Pica"
 BRIDGES = ROOT / "bridges"
 PATCH_FILES = ROOT / "patches"
 GENERATED = ROOT / "generated"
@@ -43,6 +44,7 @@ VERSIONS_FILE = UPSTREAM / "versions.json"
 # 补丁文件的去向：patches/<名字>/*.patch 打在对应的上游仓库上。
 PATCH_FILE_REPOS = {
     "ehpanda": EHPANDA,
+    "pica": PICA,
     "pixiv": PIXIV,
 }
 
@@ -195,7 +197,7 @@ def relative(path: Path) -> str:
 
 
 def require_upstream() -> None:
-    for repo in (EHPANDA, PIXIV):
+    for repo in (EHPANDA, PIXIV, PICA):
         if not any(repo.glob("*")):
             raise PrepareError(
                 "上游目录 {} 是空的，请先执行 git submodule update --init --recursive".format(relative(repo))
@@ -482,7 +484,7 @@ def normalize() -> None:
     本地配置并重新检出，不影响仓库内容。
     """
     say("== 把上游子模块换成 LF 换行 ==")
-    for repo in (EHPANDA, PIXIV):
+    for repo in (EHPANDA, PIXIV, PICA):
         name = relative(repo)
         if run_git(repo, "status", "--porcelain").stdout.strip():
             raise PrepareError("{} 里有未还原的改动，先运行 python scripts/prepare.py revert".format(name))
