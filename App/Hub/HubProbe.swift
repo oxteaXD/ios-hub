@@ -107,31 +107,44 @@ private struct PagerEdgeGuardProbeDetail: View {
 
 // MARK: - UIKit 的横向翻页
 
-/// UIKit 版的同一个场景：导航控制器里推入一页，页面是整屏的横向翻页（Pica 的排行榜页和横向阅读就是这样），
+/// UIKit 版的同一个场景：导航控制器里推入的页面是整屏的横向翻页（Pica 的排行榜页和横向阅读就是这样），
 /// 用来验证 `HubEdgeBackGuard`。`hasGuard` 为 false 时不装，用来做对照。
+/// 导航栈有三层（首页 → 中间页 → 翻页页），这样能看出一次右滑是不是恰好只返回了一级。
 private struct UIKitPagerProbe: UIViewControllerRepresentable {
     let hasGuard: Bool
 
     func makeUIViewController(context: Context) -> UINavigationController {
-        let root = UIViewController()
-        root.view.backgroundColor = .systemBackground
-        let label = UILabel()
-        label.text = "测试首页"
-        label.accessibilityIdentifier = "probe.root"
-        label.translatesAutoresizingMaskIntoConstraints = false
-        root.view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: root.view.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: root.view.centerYAnchor),
-        ])
-
-        let navigation = UINavigationController(rootViewController: root)
-        // 一打开就停在推入的那一页上，这样右滑返回有地方可回。
-        navigation.pushViewController(UIKitPagerProbePageController(hasGuard: hasGuard), animated: false)
+        let navigation = UINavigationController()
+        // 一打开就停在最上面的翻页页上，下面垫着两层。
+        navigation.setViewControllers(
+            [
+                Self.labelController(text: "测试首页", identifier: "probe.root"),
+                Self.labelController(text: "测试中间页", identifier: "probe.middle"),
+                UIKitPagerProbePageController(hasGuard: hasGuard),
+            ],
+            animated: false
+        )
         return navigation
     }
 
     func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
+
+    /// 只有一行字的页面，界面测试靠标识认出停在哪一层。
+    private static func labelController(text: String, identifier: String) -> UIViewController {
+        let controller = UIViewController()
+        controller.title = text
+        controller.view.backgroundColor = .systemBackground
+        let label = UILabel()
+        label.text = text
+        label.accessibilityIdentifier = identifier
+        label.translatesAutoresizingMaskIntoConstraints = false
+        controller.view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: controller.view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: controller.view.centerYAnchor),
+        ])
+        return controller
+    }
 }
 
 private final class UIKitPagerProbePageController: UIViewController,

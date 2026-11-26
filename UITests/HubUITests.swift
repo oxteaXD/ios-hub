@@ -233,6 +233,7 @@ final class HubUITests: XCTestCase {
 
         let page = element("probe.page", in: app)
         let taps = element("probe.imageTaps", in: app)
+        let middle = element("probe.middle", in: app)
         let root = element("probe.root", in: app)
         XCTAssertTrue(page.waitForExistence(timeout: 60), "没有打开 UIKit 的翻页测试页面")
         XCTAssertEqual(page.label, "1")
@@ -253,21 +254,33 @@ final class HubUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 5) { taps.label == "2" }, "轻点让出区域以外，页面没有收到这次点击")
         XCTAssertEqual(page.label, "2", "轻点不应该翻页")
 
-        // 从让出区域里向右滑：不能翻页。系统会不会把它当成返回由系统决定，这里只记录。
-        dragRightAcrossPager(in: app, pointsFromLeft: 30)
-        let poppedFromStrip = waitUntil(timeout: 4) { !page.exists }
-        if !poppedFromStrip {
-            XCTAssertEqual(page.label, "2", "从左侧让出的区域向右滑，不应该翻页")
-        }
-        print("HUBUI|UIKit 翻页左侧让出区域|从让出区域里（距左边缘 30 点）右滑：\(poppedFromStrip ? "返回了上一级" : "没有翻页，也没有返回")")
+        // 从让出区域里向左滑：既不翻页，也不返回。
+        let stripPoint = pagerPoint(in: app, pointsFromLeft: 30)
+        stripPoint.press(forDuration: 0.05, thenDragTo: pagerPoint(in: app, pointsFromLeft: 2))
+        settle(2)
+        XCTAssertTrue(page.exists, "从让出区域里向左滑，不应该返回")
+        XCTAssertEqual(page.label, "2", "从让出区域里向左滑，不应该翻页")
 
-        // 从屏幕最左边缘向右滑：必须能返回上一级。
-        if !poppedFromStrip {
-            dragRightAcrossPager(in: app, pointsFromLeft: 3)
-            XCTAssertTrue(waitUntil(timeout: 10) { !page.exists }, "在翻页区域里从屏幕左边缘右滑，没有返回上一级")
-            print("HUBUI|UIKit 翻页左侧让出区域|从屏幕左边缘（距左边缘 3 点）右滑：返回了上一级")
-        }
-        XCTAssertTrue(root.waitForExistence(timeout: 10), "返回之后没有回到测试首页")
+        // 从让出区域里向右滑：返回上一级，而且恰好一级（停在中间页，不是首页）。
+        dragRightAcrossPager(in: app, pointsFromLeft: 30)
+        XCTAssertTrue(waitUntil(timeout: 10) { !page.exists }, "从左侧让出的区域向右滑，没有返回上一级")
+        XCTAssertTrue(middle.waitForExistence(timeout: 10), "从让出区域右滑之后，没有停在上一级页面")
+        XCTAssertFalse(root.exists, "从让出区域右滑一次，多返回了一级")
+        print("HUBUI|UIKit 翻页左侧让出区域|从让出区域里（距左边缘 30 点）右滑：返回了上一级，恰好一级")
+        app.terminate()
+
+        // 贴着屏幕最左边缘向右滑：系统自己的右滑返回照常，同样恰好返回一级（宿主加的返回不会再叠一次）。
+        let edgeApp = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerEdgeGuard"])
+        edgeApp.launch()
+        let edgePage = element("probe.page", in: edgeApp)
+        XCTAssertTrue(edgePage.waitForExistence(timeout: 60), "第二次没有打开 UIKit 的翻页测试页面")
+        settle(2)
+        dragRightAcrossPager(in: edgeApp, pointsFromLeft: 3)
+        XCTAssertTrue(waitUntil(timeout: 10) { !edgePage.exists }, "在翻页区域里从屏幕左边缘右滑，没有返回上一级")
+        XCTAssertTrue(element("probe.middle", in: edgeApp).waitForExistence(timeout: 10), "从屏幕左边缘右滑之后，没有停在上一级页面")
+        settle(2)
+        XCTAssertFalse(element("probe.root", in: edgeApp).exists, "从屏幕左边缘右滑一次，多返回了一级")
+        print("HUBUI|UIKit 翻页左侧让出区域|从屏幕左边缘（距左边缘 3 点）右滑：返回了上一级，恰好一级")
     }
 
     /// Pica 的代码和依赖库是进入它的时候才载入的。这里从启动页进入 Pica，确认它的登录页出来了、
