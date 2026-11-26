@@ -1,0 +1,28 @@
+diff --git a/Pods/AFNetworking/AFNetworking/AFHTTPSessionManager.m b/Pods/AFNetworking/AFNetworking/AFHTTPSessionManager.m
+index b4ab591..80de21d 100644
+--- a/Pods/AFNetworking/AFNetworking/AFHTTPSessionManager.m
++++ b/Pods/AFNetworking/AFNetworking/AFHTTPSessionManager.m
+@@ -29,7 +29,8 @@
+ #import <Security/Security.h>
+ 
+ #import <netinet/in.h>
+-#import <netinet6/in6.h>
++// [Hub] 去掉了 #import <netinet6/in6.h>：新版系统 SDK 把它标成了模块私有的头文件，直接引用会编译报错；
++// 它的内容已经由上面的 <netinet/in.h> 带进来了。
+ #import <arpa/inet.h>
+ #import <ifaddrs.h>
+ #import <netdb.h>
+diff --git a/Pods/AFNetworking/AFNetworking/AFNetworkReachabilityManager.m b/Pods/AFNetworking/AFNetworking/AFNetworkReachabilityManager.m
+index 0322bf9..1217be9 100644
+--- a/Pods/AFNetworking/AFNetworking/AFNetworkReachabilityManager.m
++++ b/Pods/AFNetworking/AFNetworking/AFNetworkReachabilityManager.m
+@@ -23,7 +23,8 @@
+ #if !TARGET_OS_WATCH
+ 
+ #import <netinet/in.h>
+-#import <netinet6/in6.h>
++// [Hub] 去掉了 #import <netinet6/in6.h>：新版系统 SDK 把它标成了模块私有的头文件，直接引用会编译报错；
++// 它的内容已经由上面的 <netinet/in.h> 带进来了。
+ #import <arpa/inet.h>
+ #import <ifaddrs.h>
+ #import <netdb.h>

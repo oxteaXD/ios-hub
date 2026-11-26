@@ -45,6 +45,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// 进入主界面（登录成功后）。对应上游 AppDelegate 的同名方法。
 - (void)setRootViewControllerToTab;
 
+/// 给整屏横向翻页的滚动视图让出左侧一条：手指从那一条里横向拖动不会翻页，留给右滑返回。
+/// 实现在宿主里（App/Hub/HubEdgeBackGuard.swift）。PicaKit 没有和宿主链接，这里按类名转过去。
++ (void)guardBackSwipeOnScrollView:(UIScrollView *)scrollView;
+
 @end
 
 NS_ASSUME_NONNULL_END

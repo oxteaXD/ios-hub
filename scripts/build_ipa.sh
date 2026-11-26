@@ -57,8 +57,9 @@ if [ "$STATUS" -ne 0 ]; then
     echo "编译失败，xcodebuild 退出码 ${STATUS}"
 
     # 把报错行挑出来去重，方便直接在运行页面上看，不用翻完整日志。
-    grep -E "(error:|fatal error|\*\* BUILD FAILED \*\*)" "$LOG" \
-        | sed -e 's/^[[:space:]]*//' \
+    # 只认编译器和链接器给出的报错：有些警告里的方法名带「error:」（比如 …requiringSecureCoding:error:），不能算进来。
+    grep -E "(: error: |^error: |: fatal error: |^ld: |^clang: error|^Undefined symbols|^  \"_|\*\* (TEST )?BUILD FAILED \*\*)" "$LOG" \
+        | sed -e "s#${PWD}/##g" \
         | awk '!seen[$0]++' \
         | head -n 200 > "$ERRORS" || true
 
@@ -76,11 +77,7 @@ if [ "$STATUS" -ne 0 ]; then
             echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
     fi
-    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-        head -n 10 "$ERRORS" | while IFS= read -r line; do
-            echo "::error::${line}"
-        done
-    fi
+    python3 -I scripts/annotate.py error "编译失败" "$ERRORS" 70
     exit "$STATUS"
 fi
 
@@ -202,6 +199,14 @@ CONTENTS="build/contents.txt"
     echo "Info.plist："
     /usr/bin/plutil -p "${APP}/Info.plist"
 } > "$CONTENTS"
+
+# 运行页面上的摘要要登录才看得到，把最要紧的几项再发一份到标注里（不登录也能看）。
+{
+    echo "版本 ${VERSION} (${BUILD_NUMBER})，${SIZE_MB} MB，最低系统 iOS ${MIN_OS}"
+    sed -n '1,/^顶层文件：/p' "$CONTENTS" | grep -v -E "^(顶层文件：|    (E-Hentai|ExHentai)/|$)" || true
+    echo "全局强调色：$(/usr/bin/plutil -extract NSAccentColorName raw -o - "${APP}/Info.plist" 2>/dev/null || echo "没有设置")"
+} > build/facts.txt
+python3 -I scripts/annotate.py notice "构建成功" build/facts.txt 40
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     {

@@ -1,0 +1,43 @@
+diff --git a/Pica/Category/Controller/PCComicPictureController.m b/Pica/Category/Controller/PCComicPictureController.m
+index 4707310..7d48d61 100644
+--- a/Pica/Category/Controller/PCComicPictureController.m
++++ b/Pica/Category/Controller/PCComicPictureController.m
+@@ -6,6 +6,7 @@
+ //  Copyright © 2020 fancy. All rights reserved.
+ //
+ 
++#import "PCHubHost.h" // [Hub]
+ #import "PCComicPictureController.h"
+ #import "PCComicPictureRequest.h"
+ #import "PCPictureCell.h"
+@@ -497,6 +498,9 @@
+         
+         _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+         _collectionView.pagingEnabled = isHorizontal;
++        // [Hub] 横向阅读时是整屏的横向翻页：让出左侧一条，手指从那里右滑是返回，不会被翻页接走。
++        // 竖向阅读时这一条不起作用（它只管横向的拖动），所以不用区分方向。
++        [PCHubHost guardBackSwipeOnScrollView:_collectionView];
+         _collectionView.backgroundColor = UIColorBlack;
+         _collectionView.delegate = self;
+         _collectionView.dataSource = self;
+diff --git a/Pica/Category/Controller/PCComicRankController.m b/Pica/Category/Controller/PCComicRankController.m
+index a79d284..c7d29d4 100644
+--- a/Pica/Category/Controller/PCComicRankController.m
++++ b/Pica/Category/Controller/PCComicRankController.m
+@@ -6,6 +6,7 @@
+ //  Copyright © 2021 fancy. All rights reserved.
+ //
+ 
++#import "PCHubHost.h" // [Hub]
+ #import "PCComicRankController.h"
+ #import "PCRankListController.h"
+ 
+@@ -125,6 +126,8 @@
+         _collectionView.delegate = self;
+         _collectionView.dataSource = self;
+         _collectionView.pagingEnabled = YES;
++        // [Hub] 整屏的横向翻页：让出左侧一条，手指从那里右滑是返回，不会被翻页接走。
++        [PCHubHost guardBackSwipeOnScrollView:_collectionView];
+         [_collectionView registerClass:[UICollectionViewCell class] forCellWithReuseIdentifier:@"UICollectionViewCell"];
+         if (@available(iOS 11, *)) {
+             _collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;

@@ -154,12 +154,14 @@ if [ "$BUILD_STATUS" -ne 0 ]; then
     note "失败  界面测试没有编译通过（xcodebuild 退出码 ${BUILD_STATUS}）"
     note ""
     # 编译日志里只有编译器和构建系统的输出，没有 App 的界面内容，可以放心摘出来。
-    grep -a -E "(error:|\*\* (TEST )?BUILD FAILED \*\*)" "$BUILD_LOG" \
-        | sed -e 's/^[[:space:]]*//' | awk '!seen[$0]++' | head -n 60 | tee -a "$RESULT" || true
+    # 只认编译器和链接器给出的报错：有些警告里的方法名带「error:」，不能算进来。
+    grep -a -E "(: error: |^error: |: fatal error: |^ld: |^clang: error|^Undefined symbols|^  \"_|\*\* (TEST )?BUILD FAILED \*\*)" "$BUILD_LOG" \
+        | sed -e "s#${PWD}/##g" | awk '!seen[$0]++' | head -n 60 | tee -a "$RESULT" || true
     note ""
     note "---- 编译日志末尾 ----"
     tail -n 25 "$BUILD_LOG" | tee -a "$RESULT"
     write_summary "界面测试失败"
+    python3 -I scripts/annotate.py error "界面测试没有编译通过" "$RESULT" 70
     echo "界面测试失败"
     exit 1
 fi
@@ -282,10 +284,13 @@ if [ -n "$REPORTS" ]; then
     done
 fi
 
+# 摘要要登录才看得到，同样的内容再发一份到标注里（不登录也能看）。
 if [ "$FAILED" -ne 0 ]; then
     write_summary "界面测试失败"
+    python3 -I scripts/annotate.py error "界面测试失败" "$RESULT" 160
     echo "界面测试失败"
     exit 1
 fi
 write_summary "界面测试通过"
+python3 -I scripts/annotate.py notice "界面测试通过" "$RESULT" 160
 echo "界面测试通过"

@@ -157,43 +157,7 @@ final class HubUITests: XCTestCase {
         let app = makeApp(["-hub.autoEnterLastModule", "YES", "-hub.lastModule", "ehpanda"])
         app.launch()
 
-        // 首次启动：勾选成年声明 → 继续 → 选统计级别 → 继续。之前的测试已经走过的话就跳过。
-        let declaration = element("first_launch_declaration", in: app)
-        let entry = element("home_ai_popular_entry", in: app)
-        XCTAssertTrue(
-            waitUntil(timeout: 60) { declaration.exists || entry.exists },
-            "进入 EhPanda 后既没有出现成年确认页，也没有出现主页"
-        )
-        if declaration.exists {
-            declaration.tap()
-            element("first_launch_continue", in: app).tap()
-            let level = element("first_launch_level_minimal", in: app)
-            XCTAssertTrue(level.waitForExistence(timeout: 30), "成年确认之后没有出现统计选项页")
-            level.tap()
-            element("first_launch_continue", in: app).tap()
-        }
-
-        // 主页：入口在最底部，往上滑到它能点到为止。
-        XCTAssertTrue(entry.waitForExistence(timeout: 60), "EhPanda 主页上没有「AI 热门」入口")
-        var swipes = 0
-        while !entry.isHittable, swipes < 8 {
-            app.swipeUp()
-            swipes += 1
-        }
-        XCTAssertTrue(entry.isHittable, "滑到主页底部后仍然点不到「AI 热门」入口")
-        entry.tap()
-
-        // 页面推入之后，主页不在界面层级里了，入口也就找不到了。
-        XCTAssertTrue(waitUntil(timeout: 30) { !entry.exists }, "点「AI 热门」入口后没有打开新页面")
-        let titleShown = waitUntil(timeout: 10) { app.navigationBars["AI 热门"].exists }
-        print("HUBUI|AI 热门入口|页面已打开，导航栏标题是「AI 热门」：\(titleShown ? "是" : "没有识别到")")
-
-        // 从屏幕左边缘向右滑，应当返回主页。
-        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 3, dy: 0))
-        let target = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
-        edge.press(forDuration: 0.05, thenDragTo: target)
-        XCTAssertTrue(entry.waitForExistence(timeout: 15), "从屏幕左边缘右滑之后没有返回主页")
-        print("HUBUI|AI 热门入口|从屏幕左边缘右滑：已返回主页")
+        checkEhPandaAIPopularAndEdgeSwipeBack(in: app, group: "AI 热门入口")
 
         XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
     }
@@ -229,6 +193,81 @@ final class HubUITests: XCTestCase {
         let pixivRotatedBack = waitUntil(timeout: 15) { app.frame.width < app.frame.height }
         print("HUBUI|屏幕方向|再次进入 Pixiv（设备仍然横着）：界面 \(describe(app.frame))")
         XCTAssertTrue(pixivRotatedBack, "再次进入 Pixiv 后，界面应该转回竖屏")
+    }
+
+    /// UIKit 写的整屏横向翻页（Pica 的排行榜页和横向阅读）同样让出了左侧一条，用的是 `HubEdgeBackGuard`。
+    /// 这些页面要登录才进得去，所以同样是在调试构建里结构相同的测试页面上验证。
+    @MainActor
+    func testEdgeBackGuardOnUIKitPager() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerEdgeGuard"])
+        app.launch()
+
+        let page = element("probe.page", in: app)
+        let taps = element("probe.imageTaps", in: app)
+        let root = element("probe.root", in: app)
+        XCTAssertTrue(page.waitForExistence(timeout: 60), "没有打开 UIKit 的翻页测试页面")
+        XCTAssertEqual(page.label, "1")
+        settle(2)
+
+        // 在让出区域以外，翻页照常。
+        dragAcrossPager(in: app, from: 0.8, to: 0.15)
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "从页面中间向左滑，没有翻到第 2 页")
+        dragAcrossPager(in: app, from: 0.4, to: 0.95)
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "1" }, "从页面中间向右滑，没有翻回第 1 页")
+        dragAcrossPager(in: app, from: 0.8, to: 0.15)
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "第二次向左滑，没有翻到第 2 页")
+
+        // 轻点不受影响：让出区域里的轻点照样落在页面上。
+        pagerPoint(in: app, pointsFromLeft: 22).tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { taps.label == "1" }, "轻点让出区域，页面没有收到这次点击")
+        pagerPoint(in: app, pointsFromLeft: 200).tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { taps.label == "2" }, "轻点让出区域以外，页面没有收到这次点击")
+        XCTAssertEqual(page.label, "2", "轻点不应该翻页")
+
+        // 从让出区域里向右滑：不能翻页。系统会不会把它当成返回由系统决定，这里只记录。
+        dragRightAcrossPager(in: app, pointsFromLeft: 30)
+        let poppedFromStrip = waitUntil(timeout: 4) { !page.exists }
+        if !poppedFromStrip {
+            XCTAssertEqual(page.label, "2", "从左侧让出的区域向右滑，不应该翻页")
+        }
+        print("HUBUI|UIKit 翻页左侧让出区域|从让出区域里（距左边缘 30 点）右滑：\(poppedFromStrip ? "返回了上一级" : "没有翻页，也没有返回")")
+
+        // 从屏幕最左边缘向右滑：必须能返回上一级。
+        if !poppedFromStrip {
+            dragRightAcrossPager(in: app, pointsFromLeft: 3)
+            XCTAssertTrue(waitUntil(timeout: 10) { !page.exists }, "在翻页区域里从屏幕左边缘右滑，没有返回上一级")
+            print("HUBUI|UIKit 翻页左侧让出区域|从屏幕左边缘（距左边缘 3 点）右滑：返回了上一级")
+        }
+        XCTAssertTrue(root.waitForExistence(timeout: 10), "返回之后没有回到测试首页")
+
+        // 对照：同样的页面不装让出区域，从同样的位置右滑会怎样。这是系统自己的行为，只记录，不判定。
+        app.terminate()
+        let bare = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerWithoutGuard"])
+        bare.launch()
+        let barePage = element("probe.page", in: bare)
+        guard barePage.waitForExistence(timeout: 60) else {
+            print("HUBUI|UIKit 翻页左侧让出区域|对照页面没有打开，跳过对照")
+            return
+        }
+        settle(2)
+        for pointsFromLeft in [CGFloat(30), CGFloat(3)] {
+            guard barePage.exists else { break }
+            if barePage.label != "2" {
+                dragAcrossPager(in: bare, from: 0.8, to: 0.15)
+                guard waitUntil(timeout: 10, { barePage.label == "2" }) else { break }
+            }
+            dragRightAcrossPager(in: bare, pointsFromLeft: pointsFromLeft)
+            settle(3)
+            let outcome: String
+            if !barePage.exists {
+                outcome = "返回了上一级"
+            } else if barePage.label == "1" {
+                outcome = "翻回了第 1 页"
+            } else {
+                outcome = "没有翻页，也没有返回"
+            }
+            print("HUBUI|UIKit 翻页左侧让出区域|对照（不装让出区域）从距左边缘 \(Int(pointsFromLeft)) 点处右滑：\(outcome)")
+        }
     }
 
     /// Pica 的代码和依赖库是进入它的时候才载入的。这里从启动页进入 Pica，确认它的登录页出来了、
@@ -287,11 +326,8 @@ final class HubUITests: XCTestCase {
         ehpandaCard.tap()
         XCTAssertTrue(switcher.waitForExistence(timeout: 60), "Pica 载入之后进入 EhPanda，没有出现悬浮按钮")
         XCTAssertEqual(switcher.value as? String, "EhPanda")
-        let ehpandaReady = waitUntil(timeout: 60) {
-            self.element("first_launch_declaration", in: app).exists || self.element("home_ai_popular_entry", in: app).exists
-        }
-        XCTAssertTrue(ehpandaReady, "Pica 载入之后进入 EhPanda，既没有出现成年确认页，也没有出现主页")
-        print("HUBUI|Pica 载入之后|EhPanda 正常打开")
+        // QMUIKit 载入后会接管进程里所有导航控制器的返回手势代理，所以在这里把 EhPanda 的侧滑返回再验一遍。
+        checkEhPandaAIPopularAndEdgeSwipeBack(in: app, group: "Pica 载入之后的 EhPanda")
 
         switcher.tap()
         XCTAssertTrue(pixivCard.waitForExistence(timeout: 30), "从 EhPanda 轻点悬浮按钮后没有回到启动页")
@@ -422,6 +458,49 @@ final class HubUITests: XCTestCase {
     }
 
     // MARK: 辅助方法
+
+    /// 在 EhPanda 里走一遍：必要时走过首次启动的两页 → 滑到主页底部点开「AI 热门」→ 从屏幕左边缘右滑返回主页。
+    /// 主页的内容不截图也不打印，这里只关心入口在不在、页面能不能打开、侧滑返回管不管用。
+    @MainActor
+    private func checkEhPandaAIPopularAndEdgeSwipeBack(in app: XCUIApplication, group: String) {
+        // 首次启动：勾选成年声明 → 继续 → 选统计级别 → 继续。之前已经走过的话就跳过。
+        let declaration = element("first_launch_declaration", in: app)
+        let entry = element("home_ai_popular_entry", in: app)
+        XCTAssertTrue(
+            waitUntil(timeout: 60) { declaration.exists || entry.exists },
+            "进入 EhPanda 后既没有出现成年确认页，也没有出现主页"
+        )
+        if declaration.exists {
+            declaration.tap()
+            element("first_launch_continue", in: app).tap()
+            let level = element("first_launch_level_minimal", in: app)
+            XCTAssertTrue(level.waitForExistence(timeout: 30), "成年确认之后没有出现统计选项页")
+            level.tap()
+            element("first_launch_continue", in: app).tap()
+        }
+
+        // 主页：入口在最底部，往上滑到它能点到为止。
+        XCTAssertTrue(entry.waitForExistence(timeout: 60), "EhPanda 主页上没有「AI 热门」入口")
+        var swipes = 0
+        while !entry.isHittable, swipes < 8 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(entry.isHittable, "滑到主页底部后仍然点不到「AI 热门」入口")
+        entry.tap()
+
+        // 页面推入之后，主页不在界面层级里了，入口也就找不到了。
+        XCTAssertTrue(waitUntil(timeout: 30) { !entry.exists }, "点「AI 热门」入口后没有打开新页面")
+        let titleShown = waitUntil(timeout: 10) { app.navigationBars["AI 热门"].exists }
+        print("HUBUI|\(group)|「AI 热门」页面已打开，导航栏标题是「AI 热门」：\(titleShown ? "是" : "没有识别到")")
+
+        // 从屏幕左边缘向右滑，应当返回主页。
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 3, dy: 0))
+        let target = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        edge.press(forDuration: 0.05, thenDragTo: target)
+        XCTAssertTrue(entry.waitForExistence(timeout: 15), "从屏幕左边缘右滑之后没有返回主页")
+        print("HUBUI|\(group)|从屏幕左边缘右滑：已返回主页")
+    }
 
     /// 翻页测试页面里图片区上的一个点：距屏幕左边缘 `pointsFromLeft` 点，高度在图片区中间。
     @MainActor

@@ -1,5 +1,6 @@
 #if DEBUG
 import SwiftUI
+import UIKit
 
 /// 只在调试构建里存在的测试页面，界面测试用启动参数 `-hub.probe <名字>` 打开。
 ///
@@ -13,6 +14,10 @@ enum HubProbe {
             return AnyView(PagerEdgeGuardProbe(hasGuard: true))
         case "pagerWithoutGuard":
             return AnyView(PagerEdgeGuardProbe(hasGuard: false))
+        case "uikitPagerEdgeGuard":
+            return AnyView(UIKitPagerProbe(hasGuard: true).ignoresSafeArea())
+        case "uikitPagerWithoutGuard":
+            return AnyView(UIKitPagerProbe(hasGuard: false).ignoresSafeArea())
         default:
             return nil
         }
@@ -97,6 +102,137 @@ private struct PagerEdgeGuardProbeDetail: View {
         } else {
             pages
         }
+    }
+}
+
+// MARK: - UIKit 的横向翻页
+
+/// UIKit 版的同一个场景：导航控制器里推入一页，页面是整屏的横向翻页（Pica 的排行榜页和横向阅读就是这样），
+/// 用来验证 `HubEdgeBackGuard`。`hasGuard` 为 false 时不装，用来做对照。
+private struct UIKitPagerProbe: UIViewControllerRepresentable {
+    let hasGuard: Bool
+
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let root = UIViewController()
+        root.view.backgroundColor = .systemBackground
+        let label = UILabel()
+        label.text = "测试首页"
+        label.accessibilityIdentifier = "probe.root"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        root.view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: root.view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: root.view.centerYAnchor),
+        ])
+
+        let navigation = UINavigationController(rootViewController: root)
+        // 一打开就停在推入的那一页上，这样右滑返回有地方可回。
+        navigation.pushViewController(UIKitPagerProbePageController(hasGuard: hasGuard), animated: false)
+        return navigation
+    }
+
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
+}
+
+private final class UIKitPagerProbePageController: UIViewController,
+    UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+    private let hasGuard: Bool
+    private let pageCount = 3
+    private var taps = 0
+
+    private lazy var collectionView: UICollectionView = {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.minimumLineSpacing = 0
+        layout.minimumInteritemSpacing = 0
+        let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        view.isPagingEnabled = true
+        view.showsHorizontalScrollIndicator = false
+        view.contentInsetAdjustmentBehavior = .never
+        view.dataSource = self
+        view.delegate = self
+        view.register(UICollectionViewCell.self, forCellWithReuseIdentifier: "page")
+        return view
+    }()
+
+    /// 界面测试靠这两个数字判断发生了什么。
+    private let pageLabel = UILabel()
+    private let tapsLabel = UILabel()
+
+    init(hasGuard: Bool) {
+        self.hasGuard = hasGuard
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        title = "测试详情"
+        view.backgroundColor = .systemBackground
+
+        collectionView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(collectionView)
+
+        pageLabel.text = "1"
+        pageLabel.accessibilityIdentifier = "probe.page"
+        tapsLabel.text = "0"
+        tapsLabel.accessibilityIdentifier = "probe.imageTaps"
+        let labels = UIStackView(arrangedSubviews: [pageLabel, tapsLabel])
+        labels.axis = .horizontal
+        labels.spacing = 24
+        labels.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(labels)
+
+        NSLayoutConstraint.activate([
+            collectionView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            collectionView.bottomAnchor.constraint(equalTo: labels.topAnchor, constant: -12),
+            labels.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            labels.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+        ])
+
+        if hasGuard {
+            HubEdgeBackGuard.install(on: collectionView)
+        }
+    }
+
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        pageCount
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        cellForItemAt indexPath: IndexPath
+    ) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "page", for: indexPath)
+        cell.contentView.backgroundColor = UIColor(
+            hue: CGFloat(indexPath.item) / CGFloat(pageCount), saturation: 0.45, brightness: 0.85, alpha: 1
+        )
+        return cell
+    }
+
+    func collectionView(
+        _ collectionView: UICollectionView,
+        layout collectionViewLayout: UICollectionViewLayout,
+        sizeForItemAt indexPath: IndexPath
+    ) -> CGSize {
+        collectionView.bounds.size
+    }
+
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        taps += 1
+        tapsLabel.text = "\(taps)"
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView.bounds.width > 0 else { return }
+        let page = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
+        pageLabel.text = "\(min(max(page, 0), pageCount - 1) + 1)"
     }
 }
 #endif

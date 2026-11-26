@@ -173,6 +173,20 @@
     return _tabBarController;
 }
 
+#pragma mark 右滑返回
+
++ (void)guardBackSwipeOnScrollView:(UIScrollView *)scrollView {
+    Class guardClass = NSClassFromString(@"HubEdgeBackGuard");
+    SEL installSelector = NSSelectorFromString(@"installOnScrollView:");
+    if (!scrollView || ![guardClass respondsToSelector:installSelector]) {
+        return;
+    }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [guardClass performSelector:installSelector withObject:scrollView];
+#pragma clang diagnostic pop
+}
+
 #pragma mark 主窗口
 
 /// 宿主的主窗口：应用场景里的关键窗口，没有就取第一个。
