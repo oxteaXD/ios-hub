@@ -1,0 +1,27 @@
+diff --git a/AppPackage/Sources/AppComponents/GalleryCover.swift b/AppPackage/Sources/AppComponents/GalleryCover.swift
+index 9412f1e..b8be9b7 100644
+--- a/AppPackage/Sources/AppComponents/GalleryCover.swift
++++ b/AppPackage/Sources/AppComponents/GalleryCover.swift
+@@ -41,5 +41,7 @@ public struct GalleryCover: View {
+             // In dark grouped lists, secondarySystemBackground matches the cell itself.
+             .background(Color(uiColor: colorScheme == .dark ? .systemGray5 : .secondarySystemBackground))
+             .clipShape(Self.clipShape)
++            // [Hub] 封面后面垫一圈淡阴影：宿主里三个应用统一的封面样式（见 HubCoverShadow）。
++            .background(HubCoverShadow())
+     }
+ }
+diff --git a/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift b/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift
+index cb4c5ce..64f77ec 100644
+--- a/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift
++++ b/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift
+@@ -155,7 +155,9 @@ public struct GalleryThumbnailCell: View {
+                 }
+             }
+             .compositingGroup()
+-            .clipShape(.rect(cornerRadius: 15))
++            // [Hub] 缩略图格子的封面原来是 15 的圆角，改成和别处的封面一样（GalleryCover 的 5），并垫上同样的淡阴影。
++            .clipShape(GalleryCover.clipShape)
++            .background(HubCoverShadow())
+     }
+ 
+     private var resolvedCoverURL: URL? {

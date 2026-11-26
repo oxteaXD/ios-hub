@@ -10,7 +10,7 @@ struct HubModule: Identifiable {
     let title: String
     let subtitle: String
     let systemImage: String
-    /// 启动页上卡片图标的底色。
+    /// 启动页上这本「书」封面的颜色。封面上印的是白字，要用深浅色模式下都压得住白字的固定颜色。
     let cardColor: Color
     /// 模块自己的强调色；为 nil 时沿用全局强调色。
     let accent: Color?

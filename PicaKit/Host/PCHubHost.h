@@ -49,6 +49,18 @@ NS_ASSUME_NONNULL_BEGIN
 /// 实现在宿主里（App/Hub/HubEdgeBackGuard.swift）。PicaKit 没有和宿主链接，这里按类名转过去。
 + (void)guardBackSwipeOnScrollView:(UIScrollView *)scrollView;
 
+/// 把一张作品封面改成宿主里三个应用统一的样子（照着系统「图书」里书的封面）：小圆角，后面垫一圈淡阴影。
+/// 在封面定好位置之后调用，一般是所在视图的 layoutSubviews 里；可以反复调用，每次都会让阴影跟上封面现在的位置。
+/// 圆角明显更大的图片（比如圆形头像）不算封面，原样不动。
+/// 用到它的地方由 patches/pica/hub-unified-style.patch 改出来。
++ (void)styleCoverView:(UIView *)coverView;
+
+/// 分类一类的图片格子：只把圆角改成和封面一样，不加阴影（格子里有的没有图，只有一个图标）。
++ (void)roundThumbnailView:(UIView *)thumbnailView;
+
+/// 宿主里三个应用统一的分区标题字体：粗体 20 点，和宿主、EhPanda、Pixiv 的分区标题在默认字号下一样大。
++ (UIFont *)sectionTitleFont;
+
 @end
 
 NS_ASSUME_NONNULL_END

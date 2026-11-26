@@ -1,0 +1,618 @@
+diff --git a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift
+index 0a6b329..c7ec797 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailInfoSection.swift
+@@ -455,8 +455,8 @@ private struct IllustDetailTagsSection: View {
+     var body: some View {
+         VStack(alignment: .leading, spacing: 8) {
+             Text(String(localized: "标签"))
+-                .font(.headline)
+-                .foregroundColor(.secondary)
++                .font(.hubSectionTitle)
++                .foregroundColor(.primary)
+             FlowLayout(spacing: 6, reorderToFill: userSettingStore.userSetting.tagLayoutOptimizationEnabled) {
+                 ForEach(illust.tags, id: \.name) { tag in
+                     Group {
+@@ -509,8 +509,8 @@ private struct IllustDetailCaptionSection: View {
+             Divider()
+             VStack(alignment: .leading, spacing: 8) {
+                 Text(String(localized: "简介"))
+-                    .font(.headline)
+-                    .foregroundColor(.secondary)
++                    .font(.hubSectionTitle)
++                    .foregroundColor(.primary)
+                 TranslatableText(text: illust.caption, font: .body)
+                     .frame(maxWidth: .infinity, alignment: .leading)
+             }
+@@ -537,8 +537,8 @@ private struct IllustDetailAuthorLatestWorksSection: View {
+                     .padding(.bottom, 8)
+ 
+                 Text("作者最新作品")
+-                    .font(.headline)
+-                    .foregroundStyle(.secondary)
++                    .font(.hubSectionTitle)
++                    .foregroundStyle(.primary)
+ 
+                 if isLoading && illusts.isEmpty {
+                     loadingWorksView
+diff --git a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailRelatedSection.swift b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailRelatedSection.swift
+index dc5caaa..6096e02 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailRelatedSection.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustDetail/IllustDetailRelatedSection.swift
+@@ -70,8 +70,8 @@ struct IllustDetailRelatedSection: View {
+                 .padding(.bottom, 8)
+ 
+             Text("相关推荐")
+-                .font(.headline)
+-                .foregroundColor(.secondary)
++                .font(.hubSectionTitle)
++                .foregroundColor(.primary)
+                 .padding(.horizontal)
+ 
+             if !isLoggedIn {
+diff --git a/Pixiv-SwiftUI/Features/General/IllustPages/IllustPagesWaterfallView.swift b/Pixiv-SwiftUI/Features/General/IllustPages/IllustPagesWaterfallView.swift
+index be32e54..011d26a 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustPages/IllustPagesWaterfallView.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustPages/IllustPagesWaterfallView.swift
+@@ -202,9 +202,10 @@ struct IllustPagesWaterfallView: View {
+                     .background(.black.opacity(0.55), in: .capsule)
+                     .padding(8)
+             }
+-            .clipShape(.rect(cornerRadius: 12))
++            .clipShape(HubCoverStyle.shape)
++            .background(PixivCoverShadow())
+             .overlay {
+-                RoundedRectangle(cornerRadius: 12)
++                HubCoverStyle.shape
+                     .stroke(
+                         activePageID == page.id ? Color.accentColor : .clear,
+                         lineWidth: 3
+diff --git a/Pixiv-SwiftUI/Features/General/IllustSeries/IllustSeriesView.swift b/Pixiv-SwiftUI/Features/General/IllustSeries/IllustSeriesView.swift
+index 898deca..648add5 100644
+--- a/Pixiv-SwiftUI/Features/General/IllustSeries/IllustSeriesView.swift
++++ b/Pixiv-SwiftUI/Features/General/IllustSeries/IllustSeriesView.swift
+@@ -187,7 +187,7 @@ struct IllustSeriesView: View {
+                 )
+                 .frame(maxWidth: .infinity)
+                 .clipped()
+-                .cornerRadius(12)
++                .pixivCover()
+             }
+ 
+             Text(detail.title)
+diff --git a/Pixiv-SwiftUI/Features/Home/RecommendView.swift b/Pixiv-SwiftUI/Features/Home/RecommendView.swift
+index 63e39ec..854ad34 100644
+--- a/Pixiv-SwiftUI/Features/Home/RecommendView.swift
++++ b/Pixiv-SwiftUI/Features/Home/RecommendView.swift
+@@ -217,7 +217,7 @@ private struct RecommendMainList: View {
+                     Text(vm.contentType == .manga
+                          ? String(localized: "漫画")
+                          : (vm.isLoggedIn ? String(localized: "插画") : String(localized: "热门")))
+-                        .font(.headline)
++                        .font(.hubSectionTitle)
+                         .foregroundColor(.primary)
+                     Spacer()
+                 }
+diff --git a/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift b/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift
+index 481045e..fd7691e 100644
+--- a/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift
++++ b/Pixiv-SwiftUI/Features/Novel/Components/NovelRankingPreview.swift
+@@ -14,7 +14,7 @@ struct NovelRankingPreview: View {
+                 NavigationLink(value: PixivNavigationRoute.novelRanking(.daily)) {
+                     HStack(spacing: 4) {
+                         Text("排行")
+-                            .font(.headline)
++                            .font(.hubSectionTitle)
+                             .foregroundColor(.primary)
+                         Image(systemName: "chevron.right")
+                             .font(.caption)
+@@ -81,7 +81,7 @@ struct NovelRankingCard: View {
+                 expiration: DefaultCacheExpiration.novel
+             )
+             .frame(width: Layout.imageSize, height: Layout.imageSize)
+-            .clipShape(RoundedRectangle(cornerRadius: 8))
++            .pixivCover()
+ 
+             VStack(alignment: .leading, spacing: 4) {
+                 Text(novel.title)
+diff --git a/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift b/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift
+index 1894191..04261fb 100644
+--- a/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift
++++ b/Pixiv-SwiftUI/Features/Novel/NovelDetail/NovelDetailInfoSection.swift
+@@ -345,8 +345,8 @@ struct NovelDetailInfoSection: View {
+     private var captionSection: some View {
+         VStack(alignment: .leading, spacing: 8) {
+             Text("简介")
+-                .font(.headline)
+-                .foregroundColor(.secondary)
++                .font(.hubSectionTitle)
++                .foregroundColor(.primary)
+ 
+             TranslatableText(text: novel.caption, font: .body)
+                 .frame(maxWidth: .infinity, alignment: .leading)
+@@ -405,8 +405,8 @@ struct NovelDetailInfoSection: View {
+     private var tagsSection: some View {
+         VStack(alignment: .leading, spacing: 8) {
+             Text(String(localized: "标签"))
+-                .font(.headline)
+-                .foregroundColor(.secondary)
++                .font(.hubSectionTitle)
++                .foregroundColor(.primary)
+ 
+             FlowLayout(
+                 spacing: 6,
+diff --git a/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift b/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift
+index f8bf9b6..f511abb 100644
+--- a/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift
++++ b/Pixiv-SwiftUI/Features/Search/Components/IllustRankingPreview.swift
+@@ -30,13 +30,13 @@ struct IllustRankingPreview: View {
+             HStack {
+                 if isGuestMode {
+                     Text("排行")
+-                        .font(.headline)
++                        .font(.hubSectionTitle)
+                         .foregroundColor(.primary)
+                 } else if let rankingType = rankingType {
+                     NavigationLink(value: PixivNavigationRoute.illustRanking(rankingType)) {
+                         HStack(spacing: 4) {
+                             Text("排行")
+-                                .font(.headline)
++                                .font(.hubSectionTitle)
+                                 .foregroundColor(.primary)
+                             Image(systemName: "chevron.right")
+                                 .font(.caption)
+@@ -46,7 +46,7 @@ struct IllustRankingPreview: View {
+                     .buttonStyle(.plain)
+                 } else {
+                     Text("排行")
+-                        .font(.headline)
++                        .font(.hubSectionTitle)
+                         .foregroundColor(.primary)
+                 }
+                 Spacer()
+@@ -159,8 +159,9 @@ struct IllustRankingCard: View {
+                     aspectRatio: illust.safeAspectRatio
+                 )
+                 .frame(width: cardWidth, height: imageHeight)
+-                .clipShape(RoundedRectangle(cornerRadius: 16))
++                .clipShape(HubCoverStyle.shape)
+                 .blur(radius: shouldBlur ? 20 : 0)
++                .background(PixivCoverShadow())
+                 .overlay(alignment: .topLeading) {
+                     HStack(spacing: 4) {
+                         if illust.type == "manga" {
+diff --git a/Pixiv-SwiftUI/Features/Search/Components/SpotlightPreview.swift b/Pixiv-SwiftUI/Features/Search/Components/SpotlightPreview.swift
+index 7d4845e..46e9e91 100644
+--- a/Pixiv-SwiftUI/Features/Search/Components/SpotlightPreview.swift
++++ b/Pixiv-SwiftUI/Features/Search/Components/SpotlightPreview.swift
+@@ -17,7 +17,7 @@ struct SpotlightPreview: View {
+                 NavigationLink(value: PixivNavigationRoute.spotlightList) {
+                     HStack(spacing: 4) {
+                         Text(String(localized: "亮点"))
+-                            .font(.headline)
++                            .font(.hubSectionTitle)
+                             .foregroundColor(.primary)
+                         Image(systemName: "chevron.right")
+                             .font(.caption)
+diff --git a/Pixiv-SwiftUI/Features/Search/SearchView.swift b/Pixiv-SwiftUI/Features/Search/SearchView.swift
+index 695cc90..217912f 100644
+--- a/Pixiv-SwiftUI/Features/Search/SearchView.swift
++++ b/Pixiv-SwiftUI/Features/Search/SearchView.swift
+@@ -269,9 +269,9 @@ struct SearchView: View {
+             .padding(8)
+             .frame(maxWidth: .infinity, alignment: .leading)
+         }
+-        .cornerRadius(16)
++        .cornerRadius(HubCoverStyle.cornerRadius)
+         .contentShape(Rectangle())
+-        .clipShape(RoundedRectangle(cornerRadius: 16))
++        .clipShape(HubCoverStyle.shape)
+     }
+ 
+     private var searchHistoryAndTrends: some View {
+@@ -291,7 +291,7 @@ struct SearchView: View {
+                 if !store.searchHistory.isEmpty {
+                     HStack(spacing: 12) {
+                         Text("搜索历史")
+-                            .font(.headline)
++                            .font(.hubSectionTitle)
+ 
+                         Spacer()
+ 
+@@ -400,7 +400,7 @@ struct SearchView: View {
+                         } else if !store.recommendedSearchTags.isEmpty {
+                             VStack(alignment: .leading) {
+                                 Text("推荐标签")
+-                                    .font(.headline)
++                                    .font(.hubSectionTitle)
+                                     .padding(.horizontal)
+                                     .padding(.top)
+ 
+@@ -413,7 +413,7 @@ struct SearchView: View {
+                                                 trendTagContent(tag)
+                                                     .frame(width: 140, height: 140)
+                                                     .contentShape(Rectangle())
+-                                                    .clipShape(RoundedRectangle(cornerRadius: 16))
++                                                    .clipShape(HubCoverStyle.shape)
+                                             }
+                                             .buttonStyle(.plain)
+                                         }
+@@ -431,7 +431,7 @@ struct SearchView: View {
+                 IllustRankingPreview()
+ 
+                 Text("热门标签")
+-                    .font(.headline)
++                    .font(.hubSectionTitle)
+                     .padding(.horizontal)
+                     .padding(.top)
+ 
+diff --git a/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift b/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift
+index 062e24e..1e7e970 100644
+--- a/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift
++++ b/Pixiv-SwiftUI/Features/Settings/BrowseHistoryView.swift
+@@ -511,15 +511,8 @@ struct BrowseHistoryCard: View {
+             #else
+             .background(Color(uiColor: .secondarySystemGroupedBackground))
+             #endif
+-            .cornerRadius(16)
+-            .background(
+-                CardShadowView(
+-                    cornerRadius: 16,
+-                    shadowColor: .black.opacity(0.2),
+-                    shadowRadius: 2,
+-                    shadowOffset: CGSize(width: 0, height: 2)
+-                )
+-            )
++            .cornerRadius(HubCoverStyle.cornerRadius)
++            .background(PixivCoverShadow())
+         }
+     }
+ 
+diff --git a/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightCard.swift b/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightCard.swift
+index 1479c7d..3266c82 100644
+--- a/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightCard.swift
++++ b/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightCard.swift
+@@ -31,7 +31,7 @@ struct SpotlightCard: View {
+             .padding(8)
+         }
+         .frame(width: width, height: width * 0.525)
+-        .clipShape(RoundedRectangle(cornerRadius: 16))
++        .pixivCover()
+         .contextMenu {
+             Button {
+                 openInBrowser(urlString: article.articleUrl)
+@@ -51,7 +51,7 @@ struct SpotlightListCard: View {
+                 urlString: article.thumbnail,
+                 aspectRatio: 1.9
+             )
+-            .clipShape(RoundedRectangle(cornerRadius: 8))
++            .pixivCover()
+ 
+             VStack(alignment: .leading, spacing: 4) {
+                 Text(article.displayTitle)
+@@ -100,7 +100,7 @@ struct SkeletonSpotlightCard: View {
+         Rectangle()
+             .fill(Color.gray.opacity(0.2))
+             .frame(width: width, height: width * 0.525)
+-            .clipShape(RoundedRectangle(cornerRadius: 16))
++            .clipShape(HubCoverStyle.shape)
+             .skeleton()
+     }
+ }
+diff --git a/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightRelatedSection.swift b/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightRelatedSection.swift
+index 66a13d2..cd0c7eb 100644
+--- a/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightRelatedSection.swift
++++ b/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightRelatedSection.swift
+@@ -11,7 +11,7 @@ struct SpotlightRelatedSection: View {
+                     .fill(Color.accentColor)
+                     .frame(width: 4, height: 18)
+                 Text(title)
+-                    .font(.headline)
++                    .font(.hubSectionTitle)
+             }
+             .padding(.horizontal)
+ 
+diff --git a/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightWorkCard.swift b/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightWorkCard.swift
+index 8b5bc0a..1b32630 100644
+--- a/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightWorkCard.swift
++++ b/Pixiv-SwiftUI/Features/Spotlight/Components/SpotlightWorkCard.swift
+@@ -63,15 +63,8 @@ struct SpotlightWorkCard: View {
+             .background(Color(uiColor: .secondarySystemGroupedBackground))
+             #endif
+             .frame(width: columnWidth)
+-            .cornerRadius(16)
+-            .background(
+-                CardShadowView(
+-                    cornerRadius: 16,
+-                    shadowColor: .black.opacity(0.2),
+-                    shadowRadius: 2,
+-                    shadowOffset: CGSize(width: 0, height: 2)
+-                )
+-            )
++            .cornerRadius(HubCoverStyle.cornerRadius)
++            .background(PixivCoverShadow())
+         }
+         .buttonStyle(.plain)
+         .contextMenu {
+@@ -113,15 +106,8 @@ struct SkeletonSpotlightWorkCard: View {
+         .background(Color(uiColor: .secondarySystemGroupedBackground))
+         #endif
+         .frame(width: columnWidth)
+-        .cornerRadius(16)
+-        .background(
+-            CardShadowView(
+-                cornerRadius: 16,
+-                shadowColor: .black.opacity(0.2),
+-                shadowRadius: 2,
+-                shadowOffset: CGSize(width: 0, height: 2)
+-            )
+-        )
++        .cornerRadius(HubCoverStyle.cornerRadius)
++        .background(PixivCoverShadow())
+     }
+ }
+ 
+diff --git a/Pixiv-SwiftUI/Features/User/UserDetailView.swift b/Pixiv-SwiftUI/Features/User/UserDetailView.swift
+index 3a1aa9e..8ccc5fe 100644
+--- a/Pixiv-SwiftUI/Features/User/UserDetailView.swift
++++ b/Pixiv-SwiftUI/Features/User/UserDetailView.swift
+@@ -524,7 +524,7 @@ struct UserProfileInfoView: View {
+             Divider()
+ 
+             Text(String(localized: "工作环境"))
+-                .font(.headline)
++                .font(.hubSectionTitle)
+                 .padding(.top)
+ 
+             Group {
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift
+index 2bbd2df..36fb590 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/BookmarkCard.swift
+@@ -203,19 +203,12 @@ struct BookmarkCard: View, Equatable {
+         #else
+         .background(Color(uiColor: .secondarySystemGroupedBackground))
+         #endif
+-        .cornerRadius(16)
++        .cornerRadius(HubCoverStyle.cornerRadius)
+         .overlay(
+-            RoundedRectangle(cornerRadius: 16)
++            RoundedRectangle(cornerRadius: HubCoverStyle.cornerRadius)
+                 .stroke(isDeleted ? Color.red : Color.clear, lineWidth: 2)
+         )
+-        .background(
+-            CardShadowView(
+-                cornerRadius: 16,
+-                shadowColor: .black.opacity(0.2),
+-                shadowRadius: 2,
+-                shadowOffset: CGSize(width: 0, height: 2)
+-            )
+-        )
++        .background(PixivCoverShadow())
+         .contextMenu {
+             if !isDeleted {
+                 #if os(macOS)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift
+index 8a74785..7dc19f9 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/IllustCard.swift
+@@ -201,15 +201,8 @@ struct IllustCard: View, Equatable {
+         .background(Color(uiColor: .secondarySystemGroupedBackground))
+         #endif
+         .frame(width: columnWidth)
+-        .cornerRadius(16)
+-        .background(
+-            CardShadowView(
+-                cornerRadius: 16,
+-                shadowColor: .black.opacity(0.2),
+-                shadowRadius: 2,
+-                shadowOffset: CGSize(width: 0, height: 2)
+-            )
+-        )
++        .cornerRadius(HubCoverStyle.cornerRadius)
++        .background(PixivCoverShadow())
+         .contextMenu {
+             #if os(macOS)
+             Button {
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift
+index 27599cb..19d9bf4 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/NovelCard.swift
+@@ -26,7 +26,7 @@ struct NovelCard: View {
+                 expiration: DefaultCacheExpiration.novel
+             )
+             .frame(width: Layout.imageSize, height: Layout.imageSize)
+-            .clipShape(RoundedRectangle(cornerRadius: 8))
++            .pixivCover()
+ 
+             VStack(alignment: .leading, spacing: 4) {
+                 Text(novel.title)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift b/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift
+index ea741c7..acc8ca4 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/NovelInfoTableRow.swift
+@@ -44,7 +44,7 @@ struct NovelInfoTableRow: View {
+                 expiration: DefaultCacheExpiration.novel
+             )
+             .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
+-            .clipShape(RoundedRectangle(cornerRadius: 8))
++            .pixivCover()
+ 
+             VStack(alignment: .leading, spacing: 4) {
+                 titleColumn
+diff --git a/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift b/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift
+index 8a55983..bd87576 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Cards/NovelSeriesCard.swift
+@@ -22,7 +22,7 @@ struct NovelSeriesCard: View {
+                 expiration: DefaultCacheExpiration.novel
+             )
+             .frame(width: 80, height: 80)
+-            .cornerRadius(8)
++            .pixivCover()
+ 
+             VStack(alignment: .leading, spacing: 6) {
+                 Text("#\(index + 1) \(novel.title)")
+diff --git a/Pixiv-SwiftUI/Shared/Components/Lists/FollowingHorizontalList.swift b/Pixiv-SwiftUI/Shared/Components/Lists/FollowingHorizontalList.swift
+index f8728dc..f1db0cf 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Lists/FollowingHorizontalList.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Lists/FollowingHorizontalList.swift
+@@ -12,7 +12,7 @@ struct FollowingHorizontalList: View {
+                 } label: {
+                     HStack(spacing: 4) {
+                         Text("已关注")
+-                            .font(.headline)
++                            .font(.hubSectionTitle)
+                             .foregroundColor(.primary)
+                         Image(systemName: "chevron.right")
+                             .font(.caption)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Lists/NovelHorizontalList.swift b/Pixiv-SwiftUI/Shared/Components/Lists/NovelHorizontalList.swift
+index 3753691..dc44cb0 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Lists/NovelHorizontalList.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Lists/NovelHorizontalList.swift
+@@ -18,7 +18,7 @@ struct NovelHorizontalList: View {
+                 NavigationLink(value: PixivNavigationRoute.novelList(listType)) {
+                     HStack(spacing: 4) {
+                         Text(title)
+-                            .font(.headline)
++                            .font(.hubSectionTitle)
+                             .foregroundColor(.primary)
+                         Image(systemName: "chevron.right")
+                             .font(.caption)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Lists/RecommendTagGroupList.swift b/Pixiv-SwiftUI/Shared/Components/Lists/RecommendTagGroupList.swift
+index b5bb0fb..7f61be4 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Lists/RecommendTagGroupList.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Lists/RecommendTagGroupList.swift
+@@ -8,7 +8,7 @@ struct RecommendTagGroupList: View {
+         VStack(alignment: .leading, spacing: 8) {
+             HStack {
+                 Text(String(localized: "为你推荐的标签"))
+-                    .font(.headline)
++                    .font(.hubSectionTitle)
+                     .foregroundColor(.primary)
+                 Spacer()
+             }
+@@ -84,7 +84,7 @@ struct RecommendTagGroupCard: View {
+             .background(Color.gray.opacity(0.1))
+             // 注意：因为是针对iOS17+ / macOS14+开发，可以使用 clipShape(.rect(cornerRadius:)) 等现代API 
+             // 为兼容性，使用 clipShape 和 RoundedRectangle
+-            .clipShape(RoundedRectangle(cornerRadius: 12))
++            .clipShape(HubCoverStyle.shape)
+ 
+             // 底部蒙版和文字
+             LinearGradient(
+@@ -93,7 +93,7 @@ struct RecommendTagGroupCard: View {
+                 endPoint: .top
+             )
+             .frame(height: 60)
+-            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 12, bottomTrailingRadius: 12, topTrailingRadius: 0))
++            .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: HubCoverStyle.cornerRadius, bottomTrailingRadius: HubCoverStyle.cornerRadius, topTrailingRadius: 0))
+ 
+             VStack(alignment: .leading, spacing: 2) {
+                 Text(group.tag)
+@@ -147,7 +147,7 @@ struct SkeletonRecommendTagGroupCard: View {
+                         .skeleton()
+                 }
+             }
+-            .clipShape(RoundedRectangle(cornerRadius: 12))
++            .clipShape(HubCoverStyle.shape)
+ 
+             VStack(alignment: .leading, spacing: 4) {
+                 Color.gray.opacity(0.3)
+diff --git a/Pixiv-SwiftUI/Shared/Components/Lists/RecommendedArtistsList.swift b/Pixiv-SwiftUI/Shared/Components/Lists/RecommendedArtistsList.swift
+index cf13a8e..234f975 100644
+--- a/Pixiv-SwiftUI/Shared/Components/Lists/RecommendedArtistsList.swift
++++ b/Pixiv-SwiftUI/Shared/Components/Lists/RecommendedArtistsList.swift
+@@ -14,7 +14,7 @@ struct RecommendedArtistsList: View {
+                 } label: {
+                     HStack(spacing: 4) {
+                         Text("画师")
+-                            .font(.headline)
++                            .font(.hubSectionTitle)
+                             .foregroundColor(.primary)
+                         Image(systemName: "chevron.right")
+                             .font(.caption)
+diff --git a/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonCard.swift b/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonCard.swift
+index 34c660e..6a8bd8e 100644
+--- a/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonCard.swift
+@@ -12,7 +12,7 @@ struct SkeletonCard: View {
+         aspectRatio: CGFloat = 1.0,
+         showTitle: Bool = true,
+         showSubtitle: Bool = true,
+-        cornerRadius: CGFloat = 16
++        cornerRadius: CGFloat = HubCoverStyle.cornerRadius
+     ) {
+         self.width = width
+         self.aspectRatio = aspectRatio
+@@ -61,7 +61,7 @@ struct SkeletonNovelCard: View {
+ 
+     var body: some View {
+         VStack(alignment: .leading, spacing: 8) {
+-            SkeletonRoundedRectangle(width: 100, height: 100, cornerRadius: 8)
++            SkeletonRoundedRectangle(width: 100, height: 100, cornerRadius: HubCoverStyle.cornerRadius)
+ 
+             VStack(alignment: .leading, spacing: 4) {
+                 VStack(alignment: .leading, spacing: 2) {
+@@ -92,7 +92,7 @@ struct SkeletonIllustRankingCard: View {
+ 
+     var body: some View {
+         VStack(alignment: .leading, spacing: 6) {
+-            SkeletonRoundedRectangle(width: width, height: 140, cornerRadius: 16)
++            SkeletonRoundedRectangle(width: width, height: 140, cornerRadius: HubCoverStyle.cornerRadius)
+ 
+             SkeletonView(height: 14, width: width, cornerRadius: 2)
+             SkeletonView(height: 12, width: width * 0.7, cornerRadius: 2)
+@@ -117,7 +117,7 @@ struct SkeletonTrendTag: View {
+ 
+     var body: some View {
+         ZStack(alignment: .bottomLeading) {
+-            RoundedRectangle(cornerRadius: 16)
++            HubCoverStyle.shape
+                 .fill(Color.gray.opacity(0.2))
+                 .frame(width: width)
+                 .frame(maxWidth: width ?? .infinity)
+diff --git a/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonNovelListCard.swift b/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonNovelListCard.swift
+index dc1ce08..1ee0ee5 100644
+--- a/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonNovelListCard.swift
++++ b/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonNovelListCard.swift
+@@ -5,7 +5,7 @@ struct SkeletonNovelListCard: View {
+ 
+     var body: some View {
+         HStack(spacing: 12) {
+-            SkeletonRoundedRectangle(width: 80, height: 80, cornerRadius: 8)
++            SkeletonRoundedRectangle(width: 80, height: 80, cornerRadius: HubCoverStyle.cornerRadius)
+ 
+             VStack(alignment: .leading, spacing: 6) {
+                 VStack(alignment: .leading, spacing: 2) {
+@@ -41,7 +41,7 @@ struct SkeletonNovelListCard: View {
+ struct SkeletonNovelSeriesCard: View {
+     var body: some View {
+         HStack(spacing: 12) {
+-            SkeletonRoundedRectangle(width: 80, height: 80, cornerRadius: 8)
++            SkeletonRoundedRectangle(width: 80, height: 80, cornerRadius: HubCoverStyle.cornerRadius)
+ 
+             VStack(alignment: .leading, spacing: 6) {
+                 VStack(alignment: .leading, spacing: 2) {
+diff --git a/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonRecommendedSearchTags.swift b/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonRecommendedSearchTags.swift
+index 214f24b..1c2679e 100644
+--- a/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonRecommendedSearchTags.swift
++++ b/Pixiv-SwiftUI/Shared/Components/UI/Skeleton/SkeletonRecommendedSearchTags.swift
+@@ -3,7 +3,7 @@ import SwiftUI
+ struct SkeletonRecommendedSearchTag: View {
+     var body: some View {
+         VStack(alignment: .leading, spacing: 0) {
+-            SkeletonRoundedRectangle(width: 140, height: 140, cornerRadius: 16)
++            SkeletonRoundedRectangle(width: 140, height: 140, cornerRadius: HubCoverStyle.cornerRadius)
+                 .overlay(alignment: .bottomLeading) {
+                     VStack(alignment: .leading, spacing: 8) {
+                         SkeletonView(height: 16, width: 80, cornerRadius: 2)
+@@ -19,7 +19,7 @@ struct SkeletonRecommendedSearchTagsList: View {
+     var body: some View {
+         VStack(alignment: .leading) {
+             Text("推荐标签")
+-                .font(.headline)
++                .font(.hubSectionTitle)
+                 .padding(.horizontal)
+                 .padding(.top)
+ 

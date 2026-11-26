@@ -189,6 +189,64 @@
 #pragma clang diagnostic pop
 }
 
+#pragma mark 统一的界面样式
+
+// 全应用统一的封面样式，和宿主的 HubCoverStyle（App/Hub/HubCoverStyle.swift）是同一组数值，改的时候两边一起改。
+static const CGFloat PCHubCoverCornerRadius = 5;
+static const float PCHubCoverShadowOpacity = 0.16;
+static const CGFloat PCHubCoverShadowRadius = 5;
+static const CGFloat PCHubCoverShadowOffsetY = 2;
+// 圆角比这个还大的图片不当作封面（比如排行榜里骑士的圆形头像）。上游给封面设的圆角是 4。
+static const CGFloat PCHubCoverMaximumOriginalRadius = 8;
+
+// 关联对象的键，只用它的地址。
+static const char PCHubCoverShadowViewKey = 0;
+
++ (void)styleCoverView:(UIView *)coverView {
+    UIView *superview = coverView.superview;
+    UIView *shadowView = objc_getAssociatedObject(coverView, &PCHubCoverShadowViewKey);
+    if (!superview || coverView.layer.cornerRadius > PCHubCoverMaximumOriginalRadius) {
+        [shadowView removeFromSuperview];
+        return;
+    }
+
+    coverView.layer.cornerRadius = PCHubCoverCornerRadius;
+    coverView.layer.cornerCurve = kCACornerCurveContinuous;
+    coverView.layer.masksToBounds = YES;
+
+    // 封面自己要裁圆角，裁了就画不出阴影，所以阴影画在垫在它后面的另一个视图上。
+    if (!shadowView) {
+        shadowView = [[UIView alloc] initWithFrame:coverView.frame];
+        shadowView.userInteractionEnabled = NO;
+        shadowView.backgroundColor = UIColor.clearColor;
+        shadowView.layer.shadowColor = UIColor.blackColor.CGColor;
+        shadowView.layer.shadowOpacity = PCHubCoverShadowOpacity;
+        shadowView.layer.shadowRadius = PCHubCoverShadowRadius;
+        shadowView.layer.shadowOffset = CGSizeMake(0, PCHubCoverShadowOffsetY);
+        objc_setAssociatedObject(coverView, &PCHubCoverShadowViewKey, shadowView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (shadowView.superview != superview) {
+        [superview insertSubview:shadowView belowSubview:coverView];
+    }
+    shadowView.hidden = coverView.hidden;
+    if (!CGRectEqualToRect(shadowView.frame, coverView.frame) || !shadowView.layer.shadowPath) {
+        shadowView.frame = coverView.frame;
+        // 直接指定阴影的轮廓，省得系统每一帧去推算。
+        shadowView.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:shadowView.bounds
+                                                                 cornerRadius:PCHubCoverCornerRadius].CGPath;
+    }
+}
+
++ (void)roundThumbnailView:(UIView *)thumbnailView {
+    thumbnailView.layer.cornerRadius = PCHubCoverCornerRadius;
+    thumbnailView.layer.cornerCurve = kCACornerCurveContinuous;
+    thumbnailView.layer.masksToBounds = YES;
+}
+
++ (UIFont *)sectionTitleFont {
+    return [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+}
+
 #pragma mark 主窗口
 
 /// 宿主的主窗口：应用场景里的关键窗口，没有就取第一个。

@@ -1,0 +1,166 @@
+diff --git a/Pica/Category/Controller/PCCategoryController.m b/Pica/Category/Controller/PCCategoryController.m
+index 3ca7765..c08f0da 100644
+--- a/Pica/Category/Controller/PCCategoryController.m
++++ b/Pica/Category/Controller/PCCategoryController.m
+@@ -21,6 +21,7 @@
+ #import "PCSearchRecordView.h"
+ #import "PCAuthenticationController.h"
+ #import "PCNavigationController.h"
++#import "PCHubHost.h"
+ #import <SafariServices/SafariServices.h>
+ 
+ @interface PCCategoryController () <UICollectionViewDelegate, UICollectionViewDataSource, QMUITextFieldDelegate>
+@@ -203,7 +204,8 @@
+         
+         QMUILabel *tltleLabel = [header viewWithTag:1000];
+         if (!tltleLabel) {
+-            tltleLabel = [[QMUILabel alloc] qmui_initWithFont:UIFontMake(15) textColor:UIColorBlue];
++            // [Hub] 分区标题统一成粗体的大字、正文的颜色。
++            tltleLabel = [[QMUILabel alloc] qmui_initWithFont:[PCHubHost sectionTitleFont] textColor:UIColorBlack];
+             tltleLabel.tag = 1000;
+             tltleLabel.frame = CGRectMake(10, 0, SCREEN_WIDTH - 20, 40);
+             [header addSubview:tltleLabel]; 
+diff --git a/Pica/Category/View/PCCategoryCell.m b/Pica/Category/View/PCCategoryCell.m
+index 00c4899..198293e 100644
+--- a/Pica/Category/View/PCCategoryCell.m
++++ b/Pica/Category/View/PCCategoryCell.m
+@@ -10,6 +10,7 @@
+ #import "UIImageView+PCAdd.h"
+ #import "UIImage+PCAdd.h"
+ #import "PCCommonUI.h"
++#import "PCHubHost.h"
+ 
+ @interface PCCategoryCell ()
+ 
+@@ -75,8 +76,7 @@
+     if (!_imageView) {
+         _imageView = [[SDAnimatedImageView alloc] init];
+         _imageView.contentMode = UIViewContentModeScaleAspectFit;
+-        _imageView.layer.cornerRadius = 4;
+-        _imageView.layer.masksToBounds = YES;
++        [PCHubHost roundThumbnailView:_imageView]; // [Hub] 圆角和封面统一
+         _imageView.layer.borderWidth = .5;
+         _imageView.layer.borderColor = UIColorSeparator.CGColor;
+     }
+diff --git a/Pica/Category/View/PCComicInfoView.m b/Pica/Category/View/PCComicInfoView.m
+index 2322743..a2cbaa7 100644
+--- a/Pica/Category/View/PCComicInfoView.m
++++ b/Pica/Category/View/PCComicInfoView.m
+@@ -17,6 +17,7 @@
+ #import "PCCommentController.h"
+ #import "PCUserInfoView.h"
+ #import "PCCommonUI.h"
++#import "PCHubHost.h"
+ 
+ @interface PCComicInfoView () <QMUIImagePreviewViewDelegate>
+ 
+@@ -80,6 +81,7 @@
+     }
+     
+     self.coverView.frame = CGRectMake(15, 10, 90, 130);
++    [PCHubHost styleCoverView:self.coverView]; // [Hub] 统一的封面样式：小圆角加淡阴影
+     self.titleLabel.frame = CGRectMake(115, 10, self.qmui_width - 120, QMUIViewSelfSizingHeight);
+     [self.authorLabel sizeToFit];
+     self.authorLabel.frame = CGRectSetXY(self.authorLabel.frame, 115, self.titleLabel.qmui_bottom + 5);
+diff --git a/Pica/Category/View/PCComicListCell.m b/Pica/Category/View/PCComicListCell.m
+index c427d5c..1e4c524 100644
+--- a/Pica/Category/View/PCComicListCell.m
++++ b/Pica/Category/View/PCComicListCell.m
+@@ -9,6 +9,7 @@
+ #import "PCComicListCell.h"
+ #import "UIImageView+PCAdd.h"
+ #import "PCCommonUI.h"
++#import "PCHubHost.h"
+  
+ @interface PCComicListCell ()
+ 
+@@ -31,6 +32,7 @@
+     [super layoutSubviews];
+     
+     self.coverView.frame = CGRectMake(15, 7.5, 90, self.contentView.qmui_height - 15);
++    [PCHubHost styleCoverView:self.coverView]; // [Hub] 统一的封面样式：小圆角加淡阴影
+     self.titleLabel.frame = CGRectMake(120, 7.5, self.contentView.qmui_width - 145, QMUIViewSelfSizingHeight);
+     self.authorLabel.frame = CGRectMake(120, self.titleLabel.qmui_bottom + 5, self.titleLabel.qmui_width, QMUIViewSelfSizingHeight);
+     self.categoryLabel.frame = CGRectMake(120, self.authorLabel.qmui_bottom + 5, self.titleLabel.qmui_width, QMUIViewSelfSizingHeight);
+diff --git a/Pica/Category/View/PCComicRankCell.m b/Pica/Category/View/PCComicRankCell.m
+index d5ed854..28c7593 100644
+--- a/Pica/Category/View/PCComicRankCell.m
++++ b/Pica/Category/View/PCComicRankCell.m
+@@ -9,6 +9,7 @@
+ #import "PCComicRankCell.h"
+ #import "PCVendorHeader.h"
+ #import "UIImageView+PCAdd.h"
++#import "PCHubHost.h"
+ 
+ @interface PCComicRankCell ()
+ 
+@@ -32,6 +33,7 @@
+     
+     self.numberLabel.frame = CGRectMake(0, 0, 35, self.contentView.qmui_height);
+     self.coverView.frame = CGRectMake(45, 10, 100, self.qmui_height - 20);
++    [PCHubHost styleCoverView:self.coverView]; // [Hub] 统一的封面样式：小圆角加淡阴影
+     self.titleLabel.frame = CGRectMake(155, 10, self.qmui_width - 160, QMUIViewSelfSizingHeight);
+     self.authorLabel.frame = CGRectMake(155, self.titleLabel.qmui_bottom + 5, self.titleLabel.qmui_width, QMUIViewSelfSizingHeight);
+     self.categoryLabel.frame = CGRectMake(155, self.authorLabel.qmui_bottom + 5, self.titleLabel.qmui_width, QMUIViewSelfSizingHeight);
+diff --git a/Pica/Category/View/PCComicRecommendView.m b/Pica/Category/View/PCComicRecommendView.m
+index 72354cf..f825f5f 100644
+--- a/Pica/Category/View/PCComicRecommendView.m
++++ b/Pica/Category/View/PCComicRecommendView.m
+@@ -14,6 +14,7 @@
+ #import "PCComicDetailController.h"
+ #import "PCComicHistory.h"
+ #import "UIImageView+PCAdd.h"
++#import "PCHubHost.h"
+  
+ @interface PCComicRecommendView () <UICollectionViewDelegate, UICollectionViewDataSource>
+ 
+@@ -105,7 +106,8 @@
+ #pragma mark - Get
+ - (QMUILabel *)titleLabel {
+     if (!_titleLabel) {
+-        _titleLabel = [[QMUILabel alloc] qmui_initWithFont:UIFontMake(15) textColor:UIColorBlack];
++        // [Hub] 分区标题统一成粗体的大字。
++        _titleLabel = [[QMUILabel alloc] qmui_initWithFont:[PCHubHost sectionTitleFont] textColor:UIColorBlack];
+         _titleLabel.text = @"看了这本子的人也在看";
+     }
+     return _titleLabel;
+diff --git a/Pica/Download/Controller/PCComicDownloadDetailController.m b/Pica/Download/Controller/PCComicDownloadDetailController.m
+index 09ef2aa..88ff4e4 100644
+--- a/Pica/Download/Controller/PCComicDownloadDetailController.m
++++ b/Pica/Download/Controller/PCComicDownloadDetailController.m
+@@ -16,6 +16,7 @@
+ #import "UIImageView+PCAdd.h"
+ #import "PCCommonUI.h"
+ #import "PCVendorHeader.h"
++#import "PCHubHost.h"
+ 
+ @interface PCComicDownloadDetailController ()
+ 
+@@ -107,6 +108,7 @@
+     _coverView.layer.cornerRadius = 4;
+     _coverView.layer.masksToBounds = YES;
+     [header addSubview:_coverView];
++    [PCHubHost styleCoverView:_coverView]; // [Hub] 统一的封面样式：小圆角加淡阴影
+ 
+     CGFloat leftX = CGRectGetMaxX(_coverView.frame) + 12;
+     CGFloat textW = SCREEN_WIDTH - leftX - 15;
+diff --git a/Pica/Download/View/PCDownloadCell.m b/Pica/Download/View/PCDownloadCell.m
+index ac5c331..65857de 100644
+--- a/Pica/Download/View/PCDownloadCell.m
++++ b/Pica/Download/View/PCDownloadCell.m
+@@ -11,6 +11,7 @@
+ #import "PCDownloadManager.h"
+ #import "UIImageView+PCAdd.h"
+ #import "PCCommonUI.h"
++#import "PCHubHost.h"
+ 
+ @interface PCDownloadCell ()
+ 
+@@ -56,6 +57,7 @@
+     [super layoutSubviews];
+ 
+     self.coverView.frame = CGRectMake(15, 7.5, 60, self.contentView.qmui_height - 15);
++    [PCHubHost styleCoverView:self.coverView]; // [Hub] 统一的封面样式：小圆角加淡阴影
+ 
+     CGFloat leftX = CGRectGetMaxX(self.coverView.frame) + 12;
+     CGFloat textWidth = self.contentView.qmui_width - leftX - 15;

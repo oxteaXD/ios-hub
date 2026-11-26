@@ -65,6 +65,25 @@ Pica（哔咔漫画客户端）是 Objective-C 写的 UIKit 应用，功能上�
 - **没有照搬上游关闭网络安全限制（ATS）的设置。** 上游允许明文 HTTP，这是整个 App 级别的设置，合并后会连带放宽
   另外两个应用。它代码里写明的地址全是 HTTPS，所以这里保持系统默认；如果遇到个别图片或链接打不开，原因可能在这里。
 
+### 统一的界面风格
+
+三个应用原本各有各的样子。这里照着系统自带的「图书」把看得见的几处统一了一下，只动样式，不动功能和页面结构：
+
+- **启动页是一排书架。** 大标题、粗体的分区标题、分区之间一条细线；每个应用是一本素色封面的书
+  （EhPanda 绿、Pixiv 蓝、Pica 粉），封面上印着应用名，下面是名字和一句说明。
+- **作品封面统一成小圆角加一圈淡阴影。** 圆角 5（EhPanda 的封面本来就是这个值），阴影是 16% 的黑色、
+  模糊半径 5、向下偏 2。Pixiv 原来是 16 的大圆角卡片和 8 的小说封面，EhPanda 的缩略图格子原来是 15，
+  Pica 原来是 4 而且没有阴影。卡片原来的排布和底板没有动。标签、分类这类压着字或只有图标的图片格子只统一了圆角，没有加阴影。
+- **分区标题统一成粗体的大字。** EhPanda 的分区标题本来就是这样（粗体的 `title3`），Pixiv 各页的分区标题
+  （原来是小一号的 `headline`，详情页里还是灰色的）和 Pica 的分区标题（原来是 15 点的常规体，首页的还是蓝色）都改成了它。
+
+没有统一的部分：字体全部保持系统默认的黑体（图书的标题用的是衬线体，这里没有跟）；强调色各用各的
+（EhPanda 绿、Pixiv 官方蓝、Pica 原样）。
+
+这几组数值各有一份：宿主和 Pixiv 用 [HubCoverStyle.swift](App/Hub/HubCoverStyle.swift)，
+EhPanda 用 [HubCoverShadow.swift](bridges/ehpanda/AppComponents/HubCoverShadow.swift)，
+Pica 用 [PCHubHost.m](PicaKit/Host/PCHubHost.m)，改的时候三处一起改。
+
 ## 得到安装包
 
 本仓库不需要 Mac。每次推送到 `main`，GitHub Actions 会在官方的 `xcode-27` 运行器上编译，
@@ -85,7 +104,10 @@ EhPanda 主页的「AI 热门」入口能打开、从屏幕左边缘右滑能返
 以及 Pica 能按需载入并显示登录页、它的提示能显示出来、它载入之后另外两个应用仍然能正常打开。
 测试结果和启动页、各应用首次启动页上的文字会写进运行摘要。
 
+启动页还会检查三本书是不是排在同一排、有没有互相压住。
+
 这个测试不登录，只覆盖启动、切换和页面跳转，浏览、下载这些功能测不到，内容筛选对不对也测不到；
+封面的圆角和阴影、分区标题的字号这类纯样式的改动，测试只能读到文字和位置，看不到样子，同样测不到；
 Pixiv 登录之后才看得到的部分（红心和收藏按钮的颜色、详情页去掉了左右滑切换作品）同样测不到，
 Pica 登录之后的全部功能也测不到。
 其中「横向翻页的左侧让出一条给右滑返回」是个例外：调试构建里有结构相同的测试页面
@@ -96,7 +118,7 @@ Pica 登录之后的全部功能也测不到。
 
 ## 使用
 
-- 打开是启动页，点卡片进入对应的应用。
+- 打开是启动页，点哪本书的封面就进入哪个应用。
 - 进入应用后屏幕右侧有一个半透明的悬浮按钮：**轻点**回到启动页，**长按**直接切到别的应用，
   **按住**可以上下拖动。它只停靠在右边缘，左边缘留给系统的侧滑返回。
   应用弹出面板或全屏页面时它会被盖住，关掉面板就又能用了。
@@ -192,21 +214,25 @@ Pica 更进一步，首次进入时才把代码载入进程。
 | EhPanda | `AppModels`、`NetworkingFeature`、`HomeFeature` 里的 10 个文件 | 内容筛选：默认不显示真人作品、主页不显示 AI 作品、顶部大卡片的取法、「AI 热门」入口 | 补丁文件 |
 | EhPanda | `AppModels/HubContentFilters.swift` | 判断 AI 作品、按分类筛选的逻辑 | 新增 |
 | EhPanda | `HomeFeature/HubAIPopular.swift` | 顶部大卡片的取法、「AI 热门」入口的界面 | 新增 |
+| EhPanda | `GalleryCover.swift`、`GalleryThumbnailCell.swift` | 统一的封面样式：封面垫上淡阴影，缩略图格子的圆角从 15 改成和别处一样的 5 | 补丁文件 |
+| EhPanda | `AppComponents/HubCoverShadow.swift` | 封面后面垫的那一圈淡阴影 | 新增 |
 | Pixiv-SwiftUI | `App/PixivApp.swift` | 去掉 `@main` | 替换 |
 | Pixiv-SwiftUI | `Core/Network/CustomProxyConfiguration.swift` | 调整图片代理时保留下载器的现有配置 | 替换 |
 | Pixiv-SwiftUI | `ThemeManager.swift`、设置和向导的外观页、带心形图标的卡片、插画和小说详情的信息区，共 14 个文件 | 官方配色：强调色固定、去掉颜色预设的入口、点亮的心统一用收藏红、「收藏」按钮的配色 | 补丁文件 |
 | Pixiv-SwiftUI | `IllustDetailNavigation.swift`、`IllustDetailImageSection.swift` | 去掉详情页左右滑切换作品；多图翻页的左侧让出一条给右滑返回 | 补丁文件 |
-
+| Pixiv-SwiftUI | 各种作品卡片和封面、载入时的占位图形、各页的分区标题，共 27 个文件 | 统一的封面样式（圆角 5 加淡阴影）和统一的分区标题（粗体的 `title3`） | 补丁文件 |
 | Pica | `PCLoginController.m`、`PCRequest.m`、`PCNewChatBaseRequest.m`、`PCSettingController.m` | 切换登录页和主界面改为通过宿主的入口 `PCHubHost`（原来是通过它自己的应用代理和窗口） | 补丁文件 |
 | Pica | `QMUIConfigurationTemplateDefault.m` | 导航栏、标签栏、工具栏、开关的全局样式收窄到只对 Pica 自己的界面生效 | 补丁文件 |
 | Pica | `PCComicRankController.m`、`PCComicPictureController.m` | 排行榜页和阅读页的横向翻页让出左侧一条给右滑返回 | 补丁文件 |
+| Pica | 本子列表、排行榜、详情页、下载页的封面，首页的分类格子，首页和详情页的分区标题，共 8 个文件 | 统一的封面样式和统一的分区标题（实现在 `PCHubHost` 里） | 补丁文件 |
 
 Pica 还有两处不是改上游文件、而是在编译时换掉的：上游的程序入口（`main.m`、`AppDelegate`、故事板）不参与编译，
 由 [PicaKit/Host](PicaKit/Host) 代替；友盟的三个库不参与编译，上游按原样引用的头文件由 [PicaKit/Stubs](PicaKit/Stubs) 里的空实现提供。
 
 Pixiv 的源码直接编在宿主的 App target 里，所以配合补丁的新代码不需要复制进上游，
-直接放在 `App/Modules/` 下：[PixivPalette.swift](App/Modules/PixivPalette.swift)（官方配色的数值）
-和 [PixivPagerEdgeGuard.swift](App/Modules/PixivPagerEdgeGuard.swift)（翻页左侧让出的那一条）。
+直接放在 `App/Modules/` 下：[PixivPalette.swift](App/Modules/PixivPalette.swift)（官方配色的数值）、
+[PixivPagerEdgeGuard.swift](App/Modules/PixivPagerEdgeGuard.swift)（翻页左侧让出的那一条）
+和 [PixivCoverStyle.swift](App/Modules/PixivCoverStyle.swift)（封面的统一样式）。
 上游那份颜色预设的数据（`ThemeColors.swift`）没有改动，只是不再被用到，这样以后跟上游更新时补丁不容易对不上。
 
 构建时还会准备两样上游工程以外的东西：

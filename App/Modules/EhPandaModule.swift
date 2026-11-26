@@ -43,7 +43,8 @@ enum EhPandaModule {
         title: "EhPanda",
         subtitle: "E-Hentai 客户端",
         systemImage: "books.vertical.fill",
-        cardColor: Color("EhPandaAccent"),
+        // 封面用强调色在浅色模式下的那个绿（#669D34），固定不跟深浅色变：深色模式下的强调色太浅，压不住封面上的白字。
+        cardColor: Color(red: 0.40, green: 0.616, blue: 0.204),
         // 上游用的是壳工程资源目录里的全局强调色，这里改成只对它自己的界面生效。
         accent: Color("EhPandaAccent"),
         interfaceStyle: nil,

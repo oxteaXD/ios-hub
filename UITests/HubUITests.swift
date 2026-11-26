@@ -25,9 +25,10 @@ final class HubUITests: XCTestCase {
         let pixivCard = element("hub.module.pixiv", in: app)
         let switcher = element("hub.switcher", in: app)
 
-        XCTAssertTrue(ehpandaCard.waitForExistence(timeout: 60), "启动页上没有出现 EhPanda 的卡片")
-        XCTAssertTrue(pixivCard.exists, "启动页上没有出现 Pixiv 的卡片")
+        XCTAssertTrue(ehpandaCard.waitForExistence(timeout: 60), "启动页上没有出现 EhPanda 的那本书")
+        XCTAssertTrue(pixivCard.exists, "启动页上没有出现 Pixiv 的那本书")
         XCTAssertFalse(switcher.exists, "启动页上不应该有悬浮按钮")
+        checkLauncherShelf(in: app)
         report("启动页", app)
 
         ehpandaCard.tap()
@@ -295,7 +296,7 @@ final class HubUITests: XCTestCase {
         let ehpandaCard = element("hub.module.ehpanda", in: app)
         let pixivCard = element("hub.module.pixiv", in: app)
         let switcher = element("hub.switcher", in: app)
-        XCTAssertTrue(picaCard.waitForExistence(timeout: 60), "启动页上没有出现 Pica 的卡片")
+        XCTAssertTrue(picaCard.waitForExistence(timeout: 60), "启动页上没有出现 Pica 的那本书")
 
         picaCard.tap()
         XCTAssertTrue(switcher.waitForExistence(timeout: 60), "进入 Pica 后没有出现悬浮按钮")
@@ -475,6 +476,43 @@ final class HubUITests: XCTestCase {
     }
 
     // MARK: 辅助方法
+
+    /// 启动页是照着系统「图书」做的书架：两个分区标题都在，三本书互不重叠、都在屏幕以内，
+    /// 竖屏的 iPhone 上排在同一排。样子（封面的颜色、圆角、阴影）这里看不到，只能查位置。
+    @MainActor
+    private func checkLauncherShelf(in app: XCUIApplication) {
+        for title in ["应用", "启动"] {
+            let header = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title)).firstMatch
+            XCTAssertTrue(header.exists, "启动页上没有「\(title)」这个分区标题")
+        }
+
+        let names = ["ehpanda", "pixiv", "pica"]
+        let frames = names.map { element("hub.module.\($0)", in: app).frame }
+        let screen = app.frame
+        print("HUBUI|启动页|三本书的位置：" + zip(names, frames).map { "\($0) \(describe($1))" }.joined(separator: "；")
+            + "；屏幕 \(describe(screen))")
+
+        for (name, frame) in zip(names, frames) {
+            XCTAssertFalse(frame.isEmpty, "启动页上没有出现 \(name) 的那本书")
+            XCTAssertTrue(screen.contains(frame), "启动页上 \(name) 的那本书有一部分在屏幕外面")
+            // 封面是 2:3 的竖长方形，下面还有两三行字，所以整本书一定比它的宽度高出一半以上。
+            XCTAssertGreaterThan(frame.height, frame.width * 1.5, "启动页上 \(name) 的那本书不是竖长的封面")
+        }
+        for first in frames.indices {
+            for second in frames.indices where second > first {
+                XCTAssertFalse(
+                    frames[first].intersects(frames[second]),
+                    "启动页上 \(names[first]) 和 \(names[second]) 两本书压在了一起"
+                )
+            }
+        }
+        if UIDevice.current.userInterfaceIdiom == .phone, screen.width < screen.height {
+            XCTAssertEqual(frames[0].minY, frames[1].minY, accuracy: 1, "竖屏的 iPhone 上，三本书应当排在同一排")
+            XCTAssertEqual(frames[1].minY, frames[2].minY, accuracy: 1, "竖屏的 iPhone 上，三本书应当排在同一排")
+            XCTAssertLessThan(frames[0].minX, frames[1].minX, "三本书应当按 EhPanda、Pixiv、Pica 的顺序从左到右排")
+            XCTAssertLessThan(frames[1].minX, frames[2].minX, "三本书应当按 EhPanda、Pixiv、Pica 的顺序从左到右排")
+        }
+    }
 
     /// 在 EhPanda 里走一遍：必要时走过首次启动的两页 → 滑到主页底部点开「AI 热门」→ 从屏幕左边缘右滑返回主页。
     /// 主页的内容不截图也不打印，这里只关心入口在不在、页面能不能打开、侧滑返回管不管用。
