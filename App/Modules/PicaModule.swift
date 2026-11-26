@@ -118,9 +118,15 @@ struct PicaRootView: View {
                         .accessibilityIdentifier("pica.diagnostics")
                 }
                 .task {
-                    // 等界面挂上窗口之后再取，那时窗口相关的信息才是准的。
-                    try? await Task.sleep(for: .seconds(1))
-                    diagnostics = PicaModule.diagnostics
+                    // 每隔一小会儿取一次：窗口相关的信息要等界面挂上窗口才准；Pica 的提示只显示一两秒，
+                    // 取自检信息时那一侧会顺便把正在显示的提示记下来。
+                    while !Task.isCancelled {
+                        let latest = PicaModule.diagnostics
+                        if latest != diagnostics {
+                            diagnostics = latest
+                        }
+                        try? await Task.sleep(for: .milliseconds(300))
+                    }
                 }
                 #endif
         } else {

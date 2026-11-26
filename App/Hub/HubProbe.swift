@@ -135,16 +135,20 @@ private struct UIKitPagerProbe: UIViewControllerRepresentable {
 }
 
 private final class UIKitPagerProbePageController: UIViewController,
-    UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+    UICollectionViewDataSource, UICollectionViewDelegate {
     private let hasGuard: Bool
     private let pageCount = 3
     private var taps = 0
 
-    private lazy var collectionView: UICollectionView = {
+    private let layout: UICollectionViewFlowLayout = {
         let layout = UICollectionViewFlowLayout()
         layout.scrollDirection = .horizontal
         layout.minimumLineSpacing = 0
         layout.minimumInteritemSpacing = 0
+        return layout
+    }()
+
+    private lazy var collectionView: UICollectionView = {
         let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
         view.isPagingEnabled = true
         view.showsHorizontalScrollIndicator = false
@@ -216,12 +220,14 @@ private final class UIKitPagerProbePageController: UIViewController,
         return cell
     }
 
-    func collectionView(
-        _ collectionView: UICollectionView,
-        layout collectionViewLayout: UICollectionViewLayout,
-        sizeForItemAt indexPath: IndexPath
-    ) -> CGSize {
-        collectionView.bounds.size
+    /// 每一页和集合视图一样大。集合视图的大小要等布局完成才知道，所以在这里设。
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let size = collectionView.bounds.size
+        if size.width > 0, size.height > 0, layout.itemSize != size {
+            layout.itemSize = size
+            layout.invalidateLayout()
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {

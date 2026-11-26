@@ -199,6 +199,35 @@ final class HubUITests: XCTestCase {
     /// 这些页面要登录才进得去，所以同样是在调试构建里结构相同的测试页面上验证。
     @MainActor
     func testEdgeBackGuardOnUIKitPager() throws {
+        // 先看不装让出区域的对照页面：确认测试页面本身能翻页，并记下系统原本的行为。
+        let bare = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerWithoutGuard"])
+        bare.launch()
+        let barePage = element("probe.page", in: bare)
+        XCTAssertTrue(barePage.waitForExistence(timeout: 60), "没有打开 UIKit 的翻页测试页面（对照）")
+        settle(2)
+        dragAcrossPager(in: bare, from: 0.8, to: 0.15)
+        XCTAssertTrue(waitUntil(timeout: 10) { barePage.label == "2" }, "对照页面：从页面中间向左滑，没有翻到第 2 页")
+        for pointsFromLeft in [CGFloat(30), CGFloat(3)] {
+            guard barePage.exists else { break }
+            if barePage.label != "2" {
+                dragAcrossPager(in: bare, from: 0.8, to: 0.15)
+                guard waitUntil(timeout: 10, { barePage.label == "2" }) else { break }
+            }
+            dragRightAcrossPager(in: bare, pointsFromLeft: pointsFromLeft)
+            settle(3)
+            let outcome: String
+            if !barePage.exists {
+                outcome = "返回了上一级"
+            } else if barePage.label == "1" {
+                outcome = "翻回了第 1 页"
+            } else {
+                outcome = "没有翻页，也没有返回"
+            }
+            print("HUBUI|UIKit 翻页左侧让出区域|对照（不装让出区域）从距左边缘 \(Int(pointsFromLeft)) 点处右滑：\(outcome)")
+        }
+        bare.terminate()
+
+        // 再看装了让出区域的页面。
         let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerEdgeGuard"])
         app.launch()
 
@@ -211,11 +240,11 @@ final class HubUITests: XCTestCase {
 
         // 在让出区域以外，翻页照常。
         dragAcrossPager(in: app, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "从页面中间向左滑，没有翻到第 2 页")
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "装了让出区域之后，从页面中间向左滑，没有翻到第 2 页")
         dragAcrossPager(in: app, from: 0.4, to: 0.95)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "1" }, "从页面中间向右滑，没有翻回第 1 页")
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "1" }, "装了让出区域之后，从页面中间向右滑，没有翻回第 1 页")
         dragAcrossPager(in: app, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "第二次向左滑，没有翻到第 2 页")
+        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "装了让出区域之后，第二次向左滑，没有翻到第 2 页")
 
         // 轻点不受影响：让出区域里的轻点照样落在页面上。
         pagerPoint(in: app, pointsFromLeft: 22).tap()
@@ -239,35 +268,6 @@ final class HubUITests: XCTestCase {
             print("HUBUI|UIKit 翻页左侧让出区域|从屏幕左边缘（距左边缘 3 点）右滑：返回了上一级")
         }
         XCTAssertTrue(root.waitForExistence(timeout: 10), "返回之后没有回到测试首页")
-
-        // 对照：同样的页面不装让出区域，从同样的位置右滑会怎样。这是系统自己的行为，只记录，不判定。
-        app.terminate()
-        let bare = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerWithoutGuard"])
-        bare.launch()
-        let barePage = element("probe.page", in: bare)
-        guard barePage.waitForExistence(timeout: 60) else {
-            print("HUBUI|UIKit 翻页左侧让出区域|对照页面没有打开，跳过对照")
-            return
-        }
-        settle(2)
-        for pointsFromLeft in [CGFloat(30), CGFloat(3)] {
-            guard barePage.exists else { break }
-            if barePage.label != "2" {
-                dragAcrossPager(in: bare, from: 0.8, to: 0.15)
-                guard waitUntil(timeout: 10, { barePage.label == "2" }) else { break }
-            }
-            dragRightAcrossPager(in: bare, pointsFromLeft: pointsFromLeft)
-            settle(3)
-            let outcome: String
-            if !barePage.exists {
-                outcome = "返回了上一级"
-            } else if barePage.label == "1" {
-                outcome = "翻回了第 1 页"
-            } else {
-                outcome = "没有翻页，也没有返回"
-            }
-            print("HUBUI|UIKit 翻页左侧让出区域|对照（不装让出区域）从距左边缘 \(Int(pointsFromLeft)) 点处右滑：\(outcome)")
-        }
     }
 
     /// Pica 的代码和依赖库是进入它的时候才载入的。这里从启动页进入 Pica，确认它的登录页出来了、
@@ -313,9 +313,13 @@ final class HubUITests: XCTestCase {
         }
 
         // 不填账号密码直接点登录，Pica 会弹出一条提示。提示是它的界面库加在主窗口上的，能出来说明这条路是通的。
+        // 提示只显示一两秒，测试来不及直接看到，所以看自检信息：那一侧会把见到过的提示记下来。
         loginButton.tap()
-        let tip = app.staticTexts["请输入账号或者密码"]
-        XCTAssertTrue(tip.waitForExistence(timeout: 10), "点「登录」后没有出现 Pica 的提示")
+        let tipSeen = waitUntil(timeout: 20) { diagnostics.exists && diagnostics.label.contains("请输入账号或者密码") }
+        if !tipSeen {
+            print("HUBUI|Pica 登录页|点「登录」之后的自检：\(diagnostics.exists ? diagnostics.label : "读不到")")
+        }
+        XCTAssertTrue(tipSeen, "点「登录」后没有出现 Pica 的提示")
         print("HUBUI|Pica 登录页|不填账号密码点「登录」：出现了提示「请输入账号或者密码」")
         settle(3)
 

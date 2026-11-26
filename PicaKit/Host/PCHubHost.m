@@ -90,6 +90,8 @@
 @property (nonatomic, assign) BOOL started;
 /// 有没有给应用代理补上 window 方法，见 -ensureDelegateWindow。
 @property (nonatomic, assign) BOOL injectedDelegateWindow;
+/// 取自检信息时在主窗口上见到过的最近一条提示，见 -noteVisibleTip。
+@property (nonatomic, copy, nullable) NSString *lastSeenTipText;
 
 @end
 
@@ -219,7 +221,28 @@
     self.injectedDelegateWindow = class_addMethod(object_getClass(delegate), @selector(window), implementation, "@@:");
 }
 
+/// Pica 的提示（QMUITips）是加在主窗口上的，只显示一两秒，界面测试来不及直接看到它。
+/// 所以宿主每隔一小会儿取一次自检信息，取的时候顺便看一眼主窗口，把正在显示的提示文字记下来。
+- (void)noteVisibleTip {
+    UIWindow *window = UIApplication.sharedApplication.qmui_delegateWindow ?: [PCHubHost hubMainWindow];
+    for (UIView *subview in window.subviews) {
+        if (![subview isKindOfClass:QMUIToastView.class]) {
+            continue;
+        }
+        UIView *contentView = ((QMUIToastView *)subview).contentView;
+        if (![contentView isKindOfClass:QMUIToastContentView.class]) {
+            continue;
+        }
+        QMUIToastContentView *content = (QMUIToastContentView *)contentView;
+        NSString *text = content.textLabelText.length ? content.textLabelText : content.detailTextLabelText;
+        if (text.length) {
+            self.lastSeenTipText = text;
+        }
+    }
+}
+
 - (NSString *)diagnostics {
+    [self noteVisibleTip];
     BOOL sceneDelegateHasWindow = NO;
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
         if ([scene.delegate respondsToSelector:@selector(window)] &&
@@ -238,8 +261,8 @@
     } else if (_rootViewController.contentViewController == _tabBarController && _tabBarController) {
         content = @"主界面";
     }
-    return [NSString stringWithFormat:@"QMUI 主窗口来自：%@；补过应用代理：%@；当前界面：%@",
-            source, self.injectedDelegateWindow ? @"是" : @"否", content];
+    return [NSString stringWithFormat:@"QMUI 主窗口来自：%@；补过应用代理：%@；当前界面：%@；见到过的最近一条提示：%@",
+            source, self.injectedDelegateWindow ? @"是" : @"否", content, self.lastSeenTipText ?: @"无"];
 }
 
 @end

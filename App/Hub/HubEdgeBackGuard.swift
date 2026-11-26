@@ -7,8 +7,12 @@ import UIKit
 /// 用在 UIKit 写的界面上（SwiftUI 的翻页用 `PixivPagerEdgeGuard`）。Pica 是 Objective-C 写的，而且按需载入、
 /// 没有和主程序链接，所以它按类名调用这里：`installOnScrollView:`，见 `PicaKit/Host/PCHubHost.m`。
 ///
-/// 做法：给滚动视图加一个只认「从左侧那一条开始的横向拖动」的手势，并让滚动视图自己的拖动手势等它失败之后才能开始。
-/// 手指从那一条里横向拖动时，这个手势成立，滚动视图就不动；别的情况下它不成立，滚动视图照常工作。
+/// 做法：给滚动视图加一个拖动手势，并让滚动视图自己的拖动手势等它有了结论之后才能开始。这个手势只在
+/// 「从左侧那一条里开始、而且是横向」的拖动上成立，成立时滚动视图就不动；其余情况它在手指刚开始移动时就宣告失败，
+/// 滚动视图随即照常工作。
+///
+/// 它每一次触摸都参与，靠「是否成立」来区分，而不是靠「只接收从那一条里开始的触摸」。后一种写法要指望
+/// 「没接收触摸的手势不会拖住等它的手势」；第一版就是那样写的，界面测试里整屏翻页不动了，所以改成不指望这一点的写法。
 @objc(HubEdgeBackGuard)
 final class HubEdgeBackGuard: NSObject, UIGestureRecognizerDelegate {
     /// 让出的宽度，和 Pixiv 多图翻页左侧让出的一样。
@@ -39,17 +43,17 @@ final class HubEdgeBackGuard: NSObject, UIGestureRecognizerDelegate {
 
     // MARK: UIGestureRecognizerDelegate
 
-    /// 只接收从左侧那一条里开始的触摸。别处开始的触摸它根本不参与，滚动视图不用等它。
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard let window = touch.window ?? gestureRecognizer.view?.window else {
+    /// 只在「从左侧那一条里开始的横向拖动」上成立。返回 false 时它当场宣告失败，等着它的滚动视图随即开始滚动。
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
+              let view = pan.view,
+              let window = view.window
+        else {
             return false
         }
-        return touch.location(in: window).x <= Self.width
-    }
-
-    /// 只认横向的拖动。竖向拖动时它不成立，滚动视图（以及外层的竖向滚动）照常处理。
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let pan = gestureRecognizer as? UIPanGestureRecognizer, let view = pan.view else {
+        // 手指按下的位置 = 现在的位置 − 已经拖过的距离。
+        let startX = pan.location(in: window).x - pan.translation(in: window).x
+        guard startX <= Self.width else {
             return false
         }
         let velocity = pan.velocity(in: view)
