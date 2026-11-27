@@ -90,6 +90,11 @@
 @property (nonatomic, assign) BOOL started;
 /// 有没有给应用代理补上 window 方法，见 -ensureDelegateWindow。
 @property (nonatomic, assign) BOOL injectedDelegateWindow;
+/// 有没有换掉 QMUI 找「当前页面」的办法，见 -redirectVisibleViewControllerLookup。
+@property (nonatomic, assign) BOOL redirectedVisibleLookup;
+/// 每次取自检信息时 QMUI 找到的「当前页面」，按先后记下来（连着相同的只记一次，只留最近几个）。
+/// 页面弹出来盖着的时候，界面测试读不到底下的自检信息，所以让它事后从这里看弹出过什么。
+@property (nonatomic, strong, nullable) NSMutableArray<NSString *> *seenPages;
 /// 取自检信息时在主窗口上见到过的最近一条提示，见 -noteVisibleTip。
 @property (nonatomic, copy, nullable) NSString *lastSeenTipText;
 
@@ -129,6 +134,7 @@
     self.started = YES;
 
     [self ensureDelegateWindow];
+    [self redirectVisibleViewControllerLookup];
     [SDImageCodersManager.sharedManager addCoder:SDImageVideoCoder.sharedCoder];
 
     // 开关打开时的颜色。上游是通过 QMUI 的配置表设到全局的（会连别的应用的开关一起改），
@@ -173,6 +179,42 @@
         _tabBarController = [[PCTabBarViewController alloc] init];
     }
     return _tabBarController;
+}
+
+#pragma mark 当前页面
+
+/// QMUI 找「屏幕上现在是哪个页面」（+[QMUIHelper visibleViewController]）的办法，是从主窗口的根控制器出发，
+/// 只沿着三种关系往下找：弹出来的页面、导航栈顶上的页面、标签栏选中的那一栏。
+/// Pica 单独运行时，窗口的根就是它的标签栏控制器，找得到。合并进宿主之后，窗口的根是宿主的，
+/// Pica 的界面是挂在里面某一层的子控制器，这三种关系都走不到它：找到的要么是宿主的根控制器，要么什么都没有。
+///
+/// 上游有二十多处跳转是「先问现在是哪个页面，再让它所在的导航栈去跳」：排行榜、收藏、历史里点一本漫画，
+/// 详情页里点某一话、标签、评论、相关推荐……问不到页面，这些点击就什么都不发生，也没有任何提示。
+/// QMUI 自己的弹窗和浮层也是这样找页面的。
+///
+/// 所以把这个方法换掉：Pica 的界面在窗口上的时候，从 Pica 自己当前的内容（登录页或主界面）出发去找；
+/// 它不在窗口上（屏幕上是别的应用）就照原来的办法。
+- (void)redirectVisibleViewControllerLookup {
+    Method method = class_getClassMethod(QMUIHelper.class, @selector(visibleViewController));
+    if (!method) {
+        return;
+    }
+    UIViewController *(*original)(id, SEL) = (UIViewController *(*)(id, SEL))method_getImplementation(method);
+    IMP replacement = imp_implementationWithBlock(^UIViewController *(id helperClass) {
+        return [PCHubHost.sharedHost visibleContentViewController]
+            ?: original(helperClass, @selector(visibleViewController));
+    });
+    method_setImplementation(method, replacement);
+    self.redirectedVisibleLookup = YES;
+}
+
+/// Pica 的界面里现在在屏幕上的那个页面。Pica 的界面不在窗口上时为 nil。
+- (nullable UIViewController *)visibleContentViewController {
+    UIViewController *content = _rootViewController.contentViewController;
+    if (!content.isViewLoaded || !content.view.window) {
+        return nil;
+    }
+    return [content qmui_visibleViewControllerIfExist];
 }
 
 #pragma mark 右滑返回
@@ -319,8 +361,25 @@ static const char PCHubCoverShadowViewKey = 0;
     } else if (_rootViewController.contentViewController == _tabBarController && _tabBarController) {
         content = @"主界面";
     }
-    return [NSString stringWithFormat:@"QMUI 主窗口来自：%@；补过应用代理：%@；当前界面：%@；见到过的最近一条提示：%@",
-            source, self.injectedDelegateWindow ? @"是" : @"否", content, self.lastSeenTipText ?: @"无"];
+    // QMUI 眼里屏幕上现在是哪个页面，它在不在导航栈里。上游很多跳转靠的就是这两样，见 -redirectVisibleViewControllerLookup。
+    UIViewController *visible = [QMUIHelper visibleViewController];
+    NSString *page = [NSString stringWithFormat:@"%@（%@）",
+                      visible ? NSStringFromClass(visible.class) : @"无",
+                      visible.navigationController ? @"在导航栈里" : @"不在导航栈里"];
+    if (!self.seenPages) {
+        self.seenPages = [NSMutableArray array];
+    }
+    if (![self.seenPages.lastObject isEqualToString:page]) {
+        [self.seenPages addObject:page];
+        if (self.seenPages.count > 6) {
+            [self.seenPages removeObjectAtIndex:0];
+        }
+    }
+    return [NSString stringWithFormat:@"QMUI 主窗口来自：%@；补过应用代理：%@；当前界面：%@；换过找当前页面的办法：%@；"
+            @"QMUI 找到的当前页面依次是：%@；见到过的最近一条提示：%@",
+            source, self.injectedDelegateWindow ? @"是" : @"否", content,
+            self.redirectedVisibleLookup ? @"是" : @"否",
+            [self.seenPages componentsJoinedByString:@" → "], self.lastSeenTipText ?: @"无"];
 }
 
 @end
