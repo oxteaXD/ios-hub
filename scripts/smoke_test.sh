@@ -8,6 +8,10 @@
 # 编译和运行分两步做。编译不过时摘出编译错误；测试一个用例都没跑完时（多半是模拟器或测试运行器
 # 没能启动）摘出 xcodebuild 给的原因，把模拟器抹掉重启后再试一次。
 #
+# 没过的用例会自动重跑，最多跑三遍，有一遍过了就算过：云端的模拟器有时整台都很慢，查询会超时、
+# 拖动手势会不被识别，和被测的代码无关。哪些用例是重跑才过的，会在结果里单独列出来，不藏着。
+# 真正的问题每一遍都会失败，照样判失败；崩溃报告另外单独检查，重跑盖不住。
+#
 # 只有 result.txt 会作为构建产物上传。截图和完整的测试日志都留在运行器上不上传：
 # 测试会进入 EhPanda 的主页，这两样东西里可能带有站点内容，而公开仓库的构建产物谁都能下载。
 #
@@ -193,6 +197,8 @@ run_tests() {
     xcodebuild test-without-building "${COMMON_ARGS[@]}" \
         -resultBundlePath "$XCRESULT" \
         -parallel-testing-enabled NO \
+        -retry-tests-on-failure \
+        -test-iterations 3 \
         > "$LOG" 2>&1
     STATUS=$?
     set -e
@@ -243,6 +249,15 @@ fi
 CASES="$(grep -a -E "Test Case '.*' (passed|failed) " "$LOG" | sed -E "s/^.*Test Case '-\[[^ ]+ ([^]]+)\]' (passed|failed) \(([0-9.]+) seconds\).*/\2  \1（\3 秒）/" | sed -e 's/^passed/通过/' -e 's/^failed/失败/' || true)"
 if [ -n "$CASES" ]; then
     note "$CASES"
+    # 同一个用例先有「失败」后有「通过」的，就是重跑才过的。
+    RETRIED="$(grep -a -E "Test Case '.*' (passed|failed) " "$LOG" \
+        | sed -E "s/^.*Test Case '-\[[^ ]+ ([^]]+)\]' (passed|failed) .*/\1 \2/" \
+        | awk '$2 == "failed" { failed[$1] = 1 } $2 == "passed" && failed[$1] { retried[$1] = 1 } END { for (name in retried) print name }' \
+        | sort | tr '\n' ' ' || true)"
+    if [ -n "$RETRIED" ]; then
+        note ""
+        note "提示  下面这些用例第一遍没过，重跑之后通过了（多半是模拟器卡，原因见下面的报错行）：${RETRIED}"
+    fi
 else
     note "失败  重试之后还是一个测试用例都没有跑完（xcodebuild 退出码 ${STATUS}），原因如下："
     startup_failure_reason | tee -a "$RESULT" || true

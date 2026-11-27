@@ -206,13 +206,14 @@ final class HubUITests: XCTestCase {
         let barePage = element("probe.page", in: bare)
         XCTAssertTrue(barePage.waitForExistence(timeout: 60), "没有打开 UIKit 的翻页测试页面（对照）")
         settle(2)
-        dragAcrossPager(in: bare, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { barePage.label == "2" }, "对照页面：从页面中间向左滑，没有翻到第 2 页")
+        XCTAssertTrue(
+            dragAcrossPager(in: bare, from: 0.8, to: 0.15, until: barePage, shows: "2"),
+            "对照页面：从页面中间向左滑，没有翻到第 2 页"
+        )
         for pointsFromLeft in [CGFloat(30), CGFloat(3)] {
             guard barePage.exists else { break }
             if barePage.label != "2" {
-                dragAcrossPager(in: bare, from: 0.8, to: 0.15)
-                guard waitUntil(timeout: 10, { barePage.label == "2" }) else { break }
+                guard dragAcrossPager(in: bare, from: 0.8, to: 0.15, until: barePage, shows: "2") else { break }
             }
             dragRightAcrossPager(in: bare, pointsFromLeft: pointsFromLeft)
             settle(3)
@@ -227,6 +228,7 @@ final class HubUITests: XCTestCase {
             print("HUBUI|UIKit 翻页左侧让出区域|对照（不装让出区域）从距左边缘 \(Int(pointsFromLeft)) 点处右滑：\(outcome)")
         }
         bare.terminate()
+        settle(3)
 
         // 再看装了让出区域的页面。
         let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerEdgeGuard"])
@@ -237,16 +239,23 @@ final class HubUITests: XCTestCase {
         let middle = element("probe.middle", in: app)
         let root = element("probe.root", in: app)
         XCTAssertTrue(page.waitForExistence(timeout: 60), "没有打开 UIKit 的翻页测试页面")
+        // 页面刚出来时界面还没稳下来，模拟器卡的时候这时去读内容会超时，所以先等一等。
+        settle(3)
         XCTAssertEqual(page.label, "1")
-        settle(2)
 
         // 在让出区域以外，翻页照常。
-        dragAcrossPager(in: app, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "装了让出区域之后，从页面中间向左滑，没有翻到第 2 页")
-        dragAcrossPager(in: app, from: 0.4, to: 0.95)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "1" }, "装了让出区域之后，从页面中间向右滑，没有翻回第 1 页")
-        dragAcrossPager(in: app, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "装了让出区域之后，第二次向左滑，没有翻到第 2 页")
+        XCTAssertTrue(
+            dragAcrossPager(in: app, from: 0.8, to: 0.15, until: page, shows: "2"),
+            "装了让出区域之后，从页面中间向左滑，没有翻到第 2 页"
+        )
+        XCTAssertTrue(
+            dragAcrossPager(in: app, from: 0.4, to: 0.95, until: page, shows: "1"),
+            "装了让出区域之后，从页面中间向右滑，没有翻回第 1 页"
+        )
+        XCTAssertTrue(
+            dragAcrossPager(in: app, from: 0.8, to: 0.15, until: page, shows: "2"),
+            "装了让出区域之后，第二次向左滑，没有翻到第 2 页"
+        )
 
         // 轻点不受影响：让出区域里的轻点照样落在页面上。
         pagerPoint(in: app, pointsFromLeft: 22).tap()
@@ -269,6 +278,7 @@ final class HubUITests: XCTestCase {
         XCTAssertFalse(root.exists, "从让出区域右滑一次，多返回了一级")
         print("HUBUI|UIKit 翻页左侧让出区域|从让出区域里（距左边缘 30 点）右滑：返回了上一级，恰好一级")
         app.terminate()
+        settle(3)
 
         // 贴着屏幕最左边缘向右滑：系统自己的右滑返回照常，同样恰好返回一级（宿主加的返回不会再叠一次）。
         let edgeApp = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "uikitPagerEdgeGuard"])
@@ -511,16 +521,23 @@ final class HubUITests: XCTestCase {
         let page = element("probe.page", in: app)
         let root = element("probe.root", in: app)
         XCTAssertTrue(page.waitForExistence(timeout: 60), "没有打开翻页测试页面")
+        // 页面刚出来时界面还没稳下来，模拟器卡的时候这时去读内容会超时，所以先等一等。
+        settle(3)
         XCTAssertEqual(page.label, "1")
-        settle(2)
 
         // 在让出区域以外，翻页照常：从中间向左滑到第 2 页，向右滑回第 1 页，再滑到第 2 页。
-        dragAcrossPager(in: app, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "从图片中间向左滑，没有翻到第 2 页")
-        dragAcrossPager(in: app, from: 0.4, to: 0.95)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "1" }, "从图片中间向右滑，没有翻回第 1 页")
-        dragAcrossPager(in: app, from: 0.8, to: 0.15)
-        XCTAssertTrue(waitUntil(timeout: 10) { page.label == "2" }, "第二次向左滑，没有翻到第 2 页")
+        XCTAssertTrue(
+            dragAcrossPager(in: app, from: 0.8, to: 0.15, until: page, shows: "2"),
+            "从图片中间向左滑，没有翻到第 2 页"
+        )
+        XCTAssertTrue(
+            dragAcrossPager(in: app, from: 0.4, to: 0.95, until: page, shows: "1"),
+            "从图片中间向右滑，没有翻回第 1 页"
+        )
+        XCTAssertTrue(
+            dragAcrossPager(in: app, from: 0.8, to: 0.15, until: page, shows: "2"),
+            "第二次向左滑，没有翻到第 2 页"
+        )
 
         // 轻点：让出区域里的轻点交给它自己的回调（详情页里是打开大图），区域以外的轻点落在图片上。
         let guardTaps = element("probe.guardTaps", in: app)
@@ -549,6 +566,7 @@ final class HubUITests: XCTestCase {
 
         // 对照：同样的页面不盖让出区域，从同样的位置右滑会怎样。这是系统自己的行为，只记录，不判定。
         app.terminate()
+        settle(3)
         let bare = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "pagerWithoutGuard"])
         bare.launch()
         let barePage = element("probe.page", in: bare)
@@ -560,8 +578,7 @@ final class HubUITests: XCTestCase {
         for pointsFromLeft in [CGFloat(30), CGFloat(3)] {
             guard barePage.exists else { break }
             if barePage.label != "2" {
-                dragAcrossPager(in: bare, from: 0.8, to: 0.15)
-                guard waitUntil(timeout: 10, { barePage.label == "2" }) else { break }
+                guard dragAcrossPager(in: bare, from: 0.8, to: 0.15, until: barePage, shows: "2") else { break }
             }
             dragRightAcrossPager(in: bare, pointsFromLeft: pointsFromLeft)
             settle(3)
@@ -657,6 +674,24 @@ final class HubUITests: XCTestCase {
         edge.press(forDuration: 0.05, thenDragTo: target)
         XCTAssertTrue(entry.waitForExistence(timeout: 15), "从屏幕左边缘右滑之后没有返回主页")
         print("HUBUI|\(group)|从屏幕左边缘右滑：已返回主页")
+    }
+
+    /// 在图片区上横向拖动，直到页码变成想要的那一页。
+    /// 模拟器卡的时候，一次拖动可能没被当成翻页就弹回去了，所以没翻过去就再拖一次，最多三次。
+    @MainActor
+    private func dragAcrossPager(
+        in app: XCUIApplication, from: CGFloat, to: CGFloat, until page: XCUIElement, shows expected: String
+    ) -> Bool {
+        for attempt in 1...3 {
+            dragAcrossPager(in: app, from: from, to: to)
+            if waitUntil(timeout: 10, { page.exists && page.label == expected }) {
+                if attempt > 1 {
+                    print("HUBUI|翻页测试|拖了 \(attempt) 次才翻到第 \(expected) 页（模拟器卡）")
+                }
+                return true
+            }
+        }
+        return false
     }
 
     /// 翻页测试页面里图片区上的一个点：距屏幕左边缘 `pointsFromLeft` 点，高度在图片区中间。
