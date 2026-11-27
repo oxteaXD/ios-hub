@@ -4,6 +4,11 @@
 import ComposableArchitecture
 public import SwiftUI
 
+#if DEBUG
+import HomeFeature
+import ParserFeature
+#endif
+
 extension AppDelegate {
     /// 把宿主观察到的场景阶段变化交给 EhPanda 处理。
     ///
@@ -14,3 +19,14 @@ extension AppDelegate {
         store.send(.onScenePhaseChange(scenePhase))
     }
 }
+
+#if DEBUG
+/// 宿主的测试页面（App/Hub/HubProbe.swift）要用到的 EhPanda 这一侧的东西。只在调试构建里有。
+public enum HubEhPandaProbes {
+    /// 收藏书签的测试页面：先过一遍解析的自检，再摆出几个假画廊。
+    @MainActor
+    public static func favoriteMark() -> AnyView {
+        AnyView(HubFavoriteProbeView(selfCheck: { await HubFavoriteSelfCheck.run() }))
+    }
+}
+#endif

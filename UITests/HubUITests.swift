@@ -365,6 +365,108 @@ final class HubUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
     }
 
+    /// Pica 的上游代码里有二十多处跳转是「先问界面库现在屏幕上是哪个页面，再让那个页面所在的导航栈去跳」：
+    /// 排行榜、收藏、历史里点一本漫画，详情页里点某一话、标签、评论……界面库原来的找法在宿主里找不到
+    /// Pica 的页面，这些点击就没有反应。宿主把找法换掉了（`PCHubHost` 的 redirectVisibleViewControllerLookup）。
+    ///
+    /// 那些页面都要登录才进得去，这里用登录页和注册页验证同一件事：界面库找到的是 Pica 自己的页面。
+    /// 注册页是弹出来的、装在导航栈里的页面；找到了它，并且它带着导航栈，
+    /// 说明「弹出的页面 → 导航栈 → 栈顶的页面」这条路在宿主里是通的，那些跳转靠的就是这条路。
+    ///
+    /// 注册页只打开看一眼就关掉，不填也不提交。它弹着的时候测试读不到底下的自检信息，
+    /// 所以让 Pica 那一侧把找到过的页面按先后记下来，关掉之后再看。
+    @MainActor
+    func testPicaFindsItsOwnPagesInsideHub() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO"])
+        app.launch()
+
+        let picaCard = element("hub.module.pica", in: app)
+        XCTAssertTrue(picaCard.waitForExistence(timeout: 60), "启动页上没有出现 Pica 的那本书")
+        picaCard.tap()
+
+        let loginButton = app.buttons["登录"]
+        XCTAssertTrue(loginButton.waitForExistence(timeout: 60), "进入 Pica 后没有出现登录页")
+
+        let diagnostics = element("pica.diagnostics", in: app)
+        let loginPage = "PCLoginController（不在导航栈里）"
+        let registerPage = "PCRegistController（在导航栈里）"
+        // 自检信息里是「……找到的当前页面依次是：甲 → 乙 → 丙；见到过的最近一条提示：……」，最后一个就是现在的页面。
+        func isCurrentPage(_ page: String) -> Bool {
+            diagnostics.exists && diagnostics.label.contains("\(page)；见到过的最近一条提示")
+        }
+        let onLogin = waitUntil(timeout: 20) { isCurrentPage(loginPage) }
+        print("HUBUI|Pica 找当前页面|登录页上的自检：\(diagnostics.exists ? diagnostics.label : "读不到")")
+        XCTAssertTrue(onLogin, "在登录页上，Pica 的界面库找到的当前页面不是登录页")
+        XCTAssertTrue(diagnostics.label.contains("换过找当前页面的办法：是"), "宿主没有换掉 Pica 的界面库找当前页面的办法")
+
+        app.buttons["注册"].tap()
+        let cancel = app.buttons["取消"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 20), "点「注册」后没有弹出注册页")
+        // 自检信息每 0.3 秒取一次，留够时间让它记下弹出来的这一页。
+        settle(3)
+        cancel.tap()
+
+        let backOnLogin = waitUntil(timeout: 20) {
+            isCurrentPage(loginPage) && diagnostics.label.contains(registerPage)
+        }
+        print("HUBUI|Pica 找当前页面|打开再关掉注册页之后的自检：\(diagnostics.exists ? diagnostics.label : "读不到")")
+        XCTAssertTrue(
+            backOnLogin,
+            "注册页弹着的时候，Pica 的界面库没有找到它或者它所在的导航栈；或者关掉之后没有回到登录页"
+        )
+        print("HUBUI|Pica 找当前页面|登录页 → 弹出的注册页（带导航栈）→ 登录页：都找对了")
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
+    /// EhPanda 的列表里，已收藏的画廊封面上垂着一条黄色书签。
+    ///
+    /// 收藏状态只有登录之后的列表页里才有，所以这里用调试构建里的测试页面（`HubProbe`）：
+    /// 先拿一小段照着站点列表页写的页面过一遍解析，确认收藏标记被记了下来；
+    /// 再摆出几个假画廊（行样式和网格样式各两个，一个已收藏、一个没有），确认书签只出现在已收藏的封面上、
+    /// 关掉书签的那一片里不出现（收藏夹页就是这样）、收藏状态变了之后书签跟着换。
+    /// 书签长什么样测试看不到，只能确认它在不在、在哪里。
+    @MainActor
+    func testEhPandaFavoriteRibbonFollowsFavoriteState() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "ehFavoriteMark"])
+        app.launch()
+
+        let selfCheck = element("probe.favorite.selfCheck", in: app)
+        let state = element("probe.favorite.state", in: app)
+        XCTAssertTrue(
+            waitUntil(timeout: 90) { state.exists && state.label == "初始" },
+            "没有打开收藏书签的测试页面，或者它没有准备好"
+        )
+        print("HUBUI|EhPanda 收藏书签|\(selfCheck.exists ? selfCheck.label : "读不到自检结果")")
+        XCTAssertTrue(selfCheck.label.contains("记上了=是"), "解析列表页时，带收藏标记的那一行没有被记成已收藏")
+        XCTAssertTrue(selfCheck.label.contains("去掉了=是"), "解析列表页时，不带收藏标记的那一行没有被记成没收藏")
+
+        func ribbon(_ gid: String) -> XCUIElement {
+            element("hub.favorite.\(gid)", in: app)
+        }
+
+        XCTAssertTrue(waitUntil(timeout: 15) { ribbon("9000001").exists }, "行样式里已收藏的画廊，封面上没有书签")
+        XCTAssertFalse(ribbon("9000002").exists, "行样式里没收藏的画廊，封面上不应该有书签")
+        XCTAssertTrue(ribbon("9000003").exists, "网格样式里已收藏的画廊，封面上没有书签")
+        XCTAssertFalse(ribbon("9000004").exists, "网格样式里没收藏的画廊，封面上不应该有书签")
+        XCTAssertFalse(ribbon("9000005").exists, "关掉书签的那一片里，已收藏的画廊也不应该有书签")
+        print(
+            "HUBUI|EhPanda 收藏书签|书签的位置：行样式 \(describe(ribbon("9000001").frame))；"
+                + "网格样式 \(describe(ribbon("9000003").frame))；屏幕 \(describe(app.frame))"
+        )
+        print("HUBUI|EhPanda 收藏书签|已收藏的有书签，没收藏的没有，关掉书签的那一片里没有")
+
+        // 对调前两个画廊的收藏状态：书签应当从甲换到乙上（在详情页收藏、取消收藏之后，列表靠的就是这个）。
+        element("probe.favorite.swap", in: app).tap()
+        let swapped = waitUntil(timeout: 15) {
+            state.label == "已对调" && ribbon("9000002").exists && !ribbon("9000001").exists
+        }
+        XCTAssertTrue(swapped, "收藏状态对调之后，书签没有跟着换到另一个画廊上")
+        print("HUBUI|EhPanda 收藏书签|收藏状态变了之后，书签跟着换了")
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
     /// Pixiv 的颜色预设已经去掉：设置向导的「外观与画质」一步里只剩主题模式，没有「主题强调色」。
     ///
     /// 向导不需要登录，也不联网。这个测试停在向导的最后一步，不点「完成设置」，

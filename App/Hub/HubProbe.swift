@@ -1,4 +1,5 @@
 #if DEBUG
+import AppFeature
 import SwiftUI
 import UIKit
 
@@ -18,6 +19,9 @@ enum HubProbe {
             return AnyView(UIKitPagerProbe(hasGuard: true).ignoresSafeArea())
         case "uikitPagerWithoutGuard":
             return AnyView(UIKitPagerProbe(hasGuard: false).ignoresSafeArea())
+        case "ehFavoriteMark":
+            // EhPanda 列表里已收藏画廊的黄色书签。页面本身在 EhPanda 那一侧（bridges/ehpanda）。
+            return HubEhPandaProbes.favoriteMark()
         default:
             return nil
         }

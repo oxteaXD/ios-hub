@@ -1,0 +1,135 @@
+diff --git a/AppPackage/Sources/FavoritesFeature/FavoritesView.swift b/AppPackage/Sources/FavoritesFeature/FavoritesView.swift
+index 46446d8..dd5858a 100644
+--- a/AppPackage/Sources/FavoritesFeature/FavoritesView.swift
++++ b/AppPackage/Sources/FavoritesFeature/FavoritesView.swift
+@@ -104,6 +104,8 @@ public struct FavoritesView: View {
+                 scrollPositionID: $store.visibleGalleryID
+             )
+             .accessibilityIdentifier("favorites-gallery-list")
++            // [Hub] 收藏夹页里全是已收藏的画廊，这里不画收藏书签。
++            .environment(\.hubShowsFavoriteRibbon, false)
+             .overlay {
+                 emptyView
+                     .animation(.default) {
+diff --git a/AppPackage/Sources/GalleryListComponents/Cells/GalleryDetailCell.swift b/AppPackage/Sources/GalleryListComponents/Cells/GalleryDetailCell.swift
+index 2b2c9e6..8d49c69 100644
+--- a/AppPackage/Sources/GalleryListComponents/Cells/GalleryDetailCell.swift
++++ b/AppPackage/Sources/GalleryListComponents/Cells/GalleryDetailCell.swift
+@@ -157,6 +157,8 @@ private struct GalleryDetailCellContent: View {
+     private var cover: some View {
+         GalleryCover(url: resolvedCoverURL, style: .standard)
+             .accessibilityHidden(true)
++            // [Hub] 已收藏的画廊，封面右上角垂一条黄色书签。
++            .hubFavoriteRibbon(gid: gallery.gid)
+     }
+ 
+     /// The designed 5pt gap is what separates single lines of text. At an accessibility size every
+diff --git a/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift b/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift
+index cb4c5ce..aa5d7ea 100644
+--- a/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift
++++ b/AppPackage/Sources/GalleryListComponents/Cells/GalleryThumbnailCell.swift
+@@ -54,6 +54,8 @@ public struct GalleryThumbnailCell: View {
+         VStack(alignment: .leading, spacing: 0) {
+             cover
+                 .fixedSize(horizontal: false, vertical: true)
++                // [Hub] 已收藏的画廊，封面左上角垂一条黄色书签（右上角是分类标签）。
++                .hubFavoriteRibbon(gid: gallery.gid, alignment: .topLeading, width: 15)
+             VStack(alignment: .leading, spacing: textColumnSpacing) {
+                 Text(gallery.displayTitle(prefersJapanese: setting.displayJapaneseTitle))
+                     .font(.callout.bold())
+diff --git a/AppPackage/Sources/HomeFeature/GalleryCardCell.swift b/AppPackage/Sources/HomeFeature/GalleryCardCell.swift
+index 4513fcc..069506c 100644
+--- a/AppPackage/Sources/HomeFeature/GalleryCardCell.swift
++++ b/AppPackage/Sources/HomeFeature/GalleryCardCell.swift
+@@ -69,6 +69,8 @@ public struct GalleryCardCell: View {
+                         style: usesCompactInformation ? .homeCompact : .homeSlideshow, contentMode: .fill,
+                         onSuccess: webImageSuccessAction
+                     )
++                    // [Hub] 已收藏的画廊，封面上垂一条黄色书签。
++                    .hubFavoriteRibbon(gid: gallery.gid)
+                     VStack(alignment: .leading, spacing: 12) {
+                         if usesCompactInformation {
+                             HomeCompactSlideshowContent(gallery: gallery)
+@@ -135,6 +137,8 @@ public struct GalleryCardCell: View {
+                     maximumHeight: max(0, (maximumHeight ?? 190) - 40),
+                     onSuccess: webImageSuccessAction
+                 )
++                // [Hub] 已收藏的画廊，封面上垂一条黄色书签。
++                .hubFavoriteRibbon(gid: gallery.gid)
+                 textColumn(titleLines: compactTitleLines)
+             }
+             .fixedSize(horizontal: false, vertical: true)
+@@ -151,6 +155,8 @@ public struct GalleryCardCell: View {
+ 
+     private var cover: some View {
+         GalleryCover(url: gallery.coverURL, style: .hero, contentMode: .fill, onSuccess: webImageSuccessAction)
++            // [Hub] 已收藏的画廊，封面上垂一条黄色书签。
++            .hubFavoriteRibbon(gid: gallery.gid)
+     }
+ 
+     /// Reserve the same preview height for every gallery at a given arrangement.
+diff --git a/AppPackage/Sources/HomeFeature/GalleryRankingCell.swift b/AppPackage/Sources/HomeFeature/GalleryRankingCell.swift
+index 64a8ce3..d9f228a 100644
+--- a/AppPackage/Sources/HomeFeature/GalleryRankingCell.swift
++++ b/AppPackage/Sources/HomeFeature/GalleryRankingCell.swift
+@@ -58,6 +58,8 @@ public struct GalleryRankingCell: View {
+ 
+     private var cover: some View {
+         GalleryCover(url: gallery.coverURL, style: showsRichInformation ? .homeRanking : .compact, contentMode: .fill)
++            // [Hub] 已收藏的画廊，封面上垂一条黄色书签。
++            .hubFavoriteRibbon(gid: gallery.gid)
+     }
+ 
+     private var rankNumber: some View {
+diff --git a/AppPackage/Sources/HomeFeature/HomeGalleryInformation.swift b/AppPackage/Sources/HomeFeature/HomeGalleryInformation.swift
+index 874c1da..5265594 100644
+--- a/AppPackage/Sources/HomeFeature/HomeGalleryInformation.swift
++++ b/AppPackage/Sources/HomeFeature/HomeGalleryInformation.swift
+@@ -108,6 +108,8 @@ struct HomeFrontPageCell: View {
+                 url: gallery.coverURL, style: coverStyle, contentMode: .fill, maximumHeight: maximumCoverHeight
+             )
+                 .accessibilityHidden(true)
++                // [Hub] 已收藏的画廊，封面上垂一条黄色书签。
++                .hubFavoriteRibbon(gid: gallery.gid)
+             if showsRichInformation {
+                 Text(gallery.displayTitle(prefersJapanese: setting.displayJapaneseTitle))
+                     .font(coverStyle == .homeCompact ? .footnote.bold() : .subheadline.bold())
+diff --git a/AppPackage/Sources/ParserFeature/Parser+Detail.swift b/AppPackage/Sources/ParserFeature/Parser+Detail.swift
+index 6c779a5..39c8d1f 100644
+--- a/AppPackage/Sources/ParserFeature/Parser+Detail.swift
++++ b/AppPackage/Sources/ParserFeature/Parser+Detail.swift
+@@ -58,6 +58,8 @@ extension Parser {
+             let isFavorited = gdfNode
+                 .at_xpath("//a [@id='favoritelink']")?
+                 .text?.contains("Add to Favorites") == false
++            // [Hub] 详情页里看到的收藏状态也记下来：在这里收藏或取消之后，列表封面上的黄色书签跟着变。
++            HubFavorites.note(gid: gid, isFavorited: isFavorited)
+             let gjText = link.at_xpath("//h1 [@id='gj']")?.text
+             let jpnTitle = gjText?.isEmpty != false ? nil : gjText
+             let parentURLString = infoPanel.parentURL.isValidURL ? infoPanel.parentURL : ""
+diff --git a/AppPackage/Sources/ParserFeature/Parser+List.swift b/AppPackage/Sources/ParserFeature/Parser+List.swift
+index 1830fb9..729c0f9 100644
+--- a/AppPackage/Sources/ParserFeature/Parser+List.swift
++++ b/AppPackage/Sources/ParserFeature/Parser+List.swift
+@@ -197,6 +197,8 @@ private extension Parser {
+         var uploader: String?
+ 
+         for div in node.xpath("//div") {
++            // [Hub] 「发布时间」那一格同时带着收藏标记，记下来给列表封面上的黄色书签用（见 HubFavorites）。
++            HubFavorites.noteListCell(id: div["id"], style: div["style"])
+             if let imgNode = div.at_css("img"),
+                let urlString = imgNode["data-src"] ?? imgNode["src"], let url = URL(string: urlString),
+                [Defaults.URL.torrentDownload, Defaults.URL.torrentDownloadInvalid].map(\.absoluteString)
+diff --git a/AppPackage/Sources/SearchFeature/GalleryHistoryCell.swift b/AppPackage/Sources/SearchFeature/GalleryHistoryCell.swift
+index 6f2990c..59b316b 100644
+--- a/AppPackage/Sources/SearchFeature/GalleryHistoryCell.swift
++++ b/AppPackage/Sources/SearchFeature/GalleryHistoryCell.swift
+@@ -27,6 +27,8 @@ public struct GalleryHistoryCell: View {
+     public var body: some View {
+         HStack(alignment: .top, spacing: 20) {
+             GalleryCover(url: gallery.coverURL, style: .compact)
++                // [Hub] 已收藏的画廊，封面上垂一条黄色书签。
++                .hubFavoriteRibbon(gid: gallery.gid)
+ 
+             VStack(alignment: .leading) {
+                 // The same title every other gallery list shows, so the Japanese titles setting applies here too.
