@@ -1,6 +1,7 @@
 name: 构建 IPA
 
 # 推送到 main 时自动构建，也可以在 Actions 页面手动运行。
+# 编译和界面测试都通过之后，安装包会被发成一个发行版（Release），不用登录就能下载。
 on:
   workflow_dispatch:
   push:
@@ -9,6 +10,7 @@ on:
       - "**.md"
       - "LICENSE"
 
+# 默认只读。只有最后的「发布到发行版」作业单独拿写权限。
 permissions:
   contents: read
 
@@ -99,3 +101,37 @@ jobs:
           path: build/smoke/result.txt
           if-no-files-found: ignore
           retention-days: 7
+
+  # 上面两个作业都通过之后，把安装包发成一个发行版（Release）。每次构建一个，旧的不删。
+  # 单独放一个作业有两个原因：要等界面测试的结果；写权限只给这里，
+  # 而这里不编译、不拉取任何依赖，只把上面编出来的安装包当文件传上去。
+  release:
+    name: 发布到发行版
+    needs: [build, smoke]
+    # 只发 main 上的构建。手动运行别的分支时，安装包只在上面的 Artifacts 里。
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 创建发行版和标签需要写权限。
+    permissions:
+      contents: write
+    steps:
+      # 不需要子模块；要完整的历史和标签，用来找上一个发行版、列出这一版的改动。
+      # 之后只在本地读 git，发布走 gh，所以不把凭据留在 git 配置里。
+      - name: 检出代码（带完整历史和标签）
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 取回安装包
+        uses: actions/download-artifact@v8
+        with:
+          name: Hub-ipa
+          path: dist
+
+      - name: 创建发行版并上传安装包
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 -I scripts/publish_release.py dist

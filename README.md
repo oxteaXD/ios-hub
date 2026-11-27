@@ -87,15 +87,24 @@ Pica 用 [PCHubHost.m](PicaKit/Host/PCHubHost.m)，改的时候三处一起改�
 ## 得到安装包
 
 本仓库不需要 Mac。每次推送到 `main`，GitHub Actions 会在官方的 `xcode-27` 运行器上编译，
-产出一个**未签名**的 `Hub.ipa`：
+产出一个**未签名**的 `Hub.ipa`。编译和下面说的界面测试都通过之后，它会被自动发成一个发行版：
 
-1. 打开仓库的 **Actions** 页面，进入最新一次「构建 IPA」。
-2. 在页面底部的 **Artifacts** 里下载 `Hub-ipa`（需要登录 GitHub），解压得到 `Hub.ipa`。
-3. 用你平时的签名工具签名并安装。
+1. 打开仓库的 [Releases](https://github.com/oxteaXD/ios-hub/releases) 页面，下载最新一版里的 `Hub.ipa`，不用登录 GitHub。
+   最新一版有一个不变的地址：<https://github.com/oxteaXD/ios-hub/releases/latest/download/Hub.ipa>。
+2. 用你平时的签名工具签名并安装。
 
-也可以在 Actions 页面点 **Run workflow** 手动构建。构建失败时，运行页面的摘要里会直接列出报错行，
-完整日志在 `build-log` 里；构建成功时摘要里有一份包内容清单。
-摘要和日志要登录 GitHub 才看得到；编译报错和界面测试的结果另外发了一份到运行页面的 **Annotations** 里，不登录也能看。
+每次构建一个发行版，标签是「v版本号-构建号」（比如 `v2026.11.27-17`），旧的不删，新的一版有问题可以装回旧的。
+发行说明里有这一版的校验和、对应的提交、各上游的版本，以及自上一版以来的提交。
+
+界面测试没通过的那次构建不会发成发行版。它的安装包仍然在运行页面底部的 **Artifacts** 里：
+下载 `Hub-ipa`（需要登录 GitHub，保留 30 天），解压得到 `Hub.ipa`。
+
+也可以在 Actions 页面点 **Run workflow** 手动构建，在 `main` 上手动构建的同样会发成发行版。
+构建失败时，运行页面的摘要里会直接列出报错行，完整日志在 `build-log` 里；构建成功时摘要里有一份包内容清单。
+摘要和日志要登录 GitHub 才看得到；编译报错、界面测试的结果和发布的结果另外发了一份到运行页面的 **Annotations** 里，不登录也能看。
+
+发布是工作流里单独的一个作业，由 [publish_release.py](scripts/publish_release.py) 完成。创建发行版和标签要写权限，
+这个权限只给了这一个作业；编译和界面测试两个作业仍然只读。
 
 每次构建还会并行跑一遍**模拟器界面测试**（[HubUITests.swift](UITests/HubUITests.swift)）：
 在 iOS 模拟器里真正点一遍——从启动页进入各个应用、用悬浮按钮返回和切换、长按悬浮按钮直接切换、
@@ -146,8 +155,9 @@ scripts/
   prepare.py              构建前准备：打补丁、复制新文件、准备标签数据和分类颜色、合并依赖锁定文件
   ci_setup.sh             云端各作业共用的准备步骤：装 XcodeGen、跑 prepare.py、生成工程
   build_ipa.sh            编译并打包成未签名 IPA
+  publish_release.py      编译和界面测试都通过之后，把安装包发成一个发行版
   embed_pica_frameworks.sh  构建阶段脚本：把 Pica 的依赖库放进安装包
-  annotate.py             把编译报错和测试结果另发一份到运行页面的标注里（不登录也能看到）
+  annotate.py             把编译报错、测试结果和发布结果另发一份到运行页面的标注里（不登录也能看到）
   smoke_test.sh           在模拟器里跑界面测试并整理结果
   make_icon.py            生成宿主图标（想换图标时才用）
 upstream/               上游项目，git 子模块，保持原样
