@@ -22,6 +22,12 @@ enum HubProbe {
         case "ehFavoriteMark":
             // EhPanda 列表里已收藏画廊的黄色书签。页面本身在 EhPanda 那一侧（bridges/ehpanda）。
             return HubEhPandaProbes.favoriteMark()
+        case "bikaFlow":
+            // 新写的哔咔界面，接口换成假数据，从登录页开始。
+            return BikaProbe.flow()
+        case "bikaSignature":
+            // 哔咔的请求签名：和上游的实现对一遍。
+            return BikaProbe.signature()
         default:
             return nil
         }

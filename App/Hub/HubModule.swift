@@ -34,5 +34,7 @@ enum HubModuleRegistry {
         EhPandaModule.descriptor,
         PixivModule.descriptor,
         PicaModule.descriptor,
+        // 新写的哔咔界面。和上面那本旧版的 Pica 是同一个站点、同一个登录状态，确认好用之后旧版会去掉。
+        BikaModule.descriptor,
     ]
 }

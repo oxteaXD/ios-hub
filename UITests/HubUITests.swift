@@ -477,6 +477,133 @@ final class HubUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
     }
 
+    /// 新写的哔咔界面要自己给请求签名。这里拿上游客户端的实现和新写的实现对同样的输入各算一遍，
+    /// 确认包括签名在内的每一个请求头都一样。上游的代码还在安装包里，测试页面把它载入进来对。
+    /// 这一项不联网：验证的是「算得和上游一样」，服务器认不认要登录之后才知道。
+    @MainActor
+    func testBikaRequestHeadersMatchUpstream() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "bikaSignature"])
+        app.launch()
+
+        let result = element("probe.bika.signature", in: app)
+        XCTAssertTrue(
+            waitUntil(timeout: 90) { result.exists && result.label.contains("请求头") },
+            "没有读到哔咔请求签名的自检结果"
+        )
+        print("HUBUI|哔咔的请求签名|\(result.label)")
+        XCTAssertTrue(result.label.contains("文字编码和系统的一样：是"), "分类名、搜索词的编码和系统的结果不一样")
+        XCTAssertTrue(result.label.contains("全部一样"), "新写的请求头和上游算出来的不一样，见测试结果里的「哔咔的请求签名」")
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
+    /// 新写的哔咔界面，接口换成一份假数据（真的接口要登录），从登录页一路走到阅读页：
+    /// 密码不对有提示、登录成功进首页 → 点分类进列表、滑到底会自动取下一页 → 进详情、收藏按钮能切换
+    /// → 开始阅读、滑到一话的结尾（中间要自动取两次后面的图片）→ 从屏幕左边缘右滑回到详情页，
+    /// 并且记住了看到哪里 → 「我的」里能打卡、浏览历史里有刚才那一本。
+    /// 假数据里没有任何真实内容，所以界面上的文字可以照常记录。
+    @MainActor
+    func testBikaFlowWithFakeData() throws {
+        let app = makeApp(["-hub.autoEnterLastModule", "NO", "-hub.probe", "bikaFlow"])
+        app.launch()
+
+        // 登录页。密码框里按回车就是提交，免得键盘挡住「登录」按钮。
+        let account = element("bika.login.account", in: app)
+        let password = element("bika.login.password", in: app)
+        XCTAssertTrue(account.waitForExistence(timeout: 90), "没有出现新版哔咔的登录页")
+        account.tap()
+        account.typeText("probe")
+        password.tap()
+        password.typeText("wrong\n")
+        let loginError = element("bika.login.error", in: app)
+        XCTAssertTrue(loginError.waitForExistence(timeout: 20), "密码不对时登录页没有给出提示")
+        print("HUBUI|新版哔咔|密码不对时的提示：\(loginError.label)")
+        XCTAssertTrue(loginError.label.contains("账号或密码不对"), "密码不对时的提示不是预期的那一句")
+
+        password.tap()
+        password.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 8) + "probe\n")
+
+        // 首页。登录成功之后系统可能弹出「要不要存储密码」，会挡住界面，有的话先点掉。
+        let category = element("bika.category.mock-category-1", in: app)
+        XCTAssertTrue(category.waitForExistence(timeout: 30), "登录之后没有出现首页的分类")
+        settle(2)
+        dismissSavePasswordPrompt(in: app)
+        settle(1)
+        report("新版哔咔的首页", app)
+        category.tap()
+
+        // 列表：第一页出来了；往下滑，第二页自动取回来。
+        let firstComic = element("bika.comic.mock-1", in: app)
+        XCTAssertTrue(firstComic.waitForExistence(timeout: 30), "点分类之后没有出现漫画列表")
+        let secondPageComic = element("bika.comic.mock-21", in: app)
+        var listSwipes = 0
+        while !secondPageComic.exists, listSwipes < 15 {
+            app.swipeUp()
+            listSwipes += 1
+        }
+        XCTAssertTrue(secondPageComic.waitForExistence(timeout: 15), "列表滑到底之后没有自动取下一页")
+        print("HUBUI|新版哔咔|列表往下滑了 \(listSwipes) 次，第二页取回来了")
+        secondPageComic.tap()
+
+        // 详情。
+        let title = element("bika.detail.title", in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 30), "点漫画之后没有进入详情页")
+        XCTAssertEqual(title.label, "测试漫画 21")
+        XCTAssertTrue(element("bika.episode.1", in: app).waitForExistence(timeout: 30), "详情页里没有出现章节")
+        let favourite = element("bika.detail.favourite", in: app)
+        XCTAssertTrue(favourite.exists, "详情页里没有收藏按钮")
+        XCTAssertFalse(favourite.label.contains("已收藏"), "还没点过收藏，按钮不应该是已收藏")
+        favourite.tap()
+        XCTAssertTrue(waitUntil(timeout: 20) { favourite.label.contains("已收藏") }, "点收藏之后按钮没有变成已收藏")
+        settle(1)
+        report("新版哔咔的详情页", app)
+
+        // 阅读：一话 12 张，一次只取 4 张。
+        let read = element("bika.detail.read", in: app)
+        XCTAssertTrue(read.label.contains("开始阅读"), "没看过的漫画，阅读按钮应当是「开始阅读」")
+        read.tap()
+        XCTAssertTrue(element("bika.reader.page.0", in: app).waitForExistence(timeout: 30), "点开始阅读之后没有进入阅读页")
+        let progress = element("bika.reader.progress", in: app)
+        XCTAssertTrue(
+            waitUntil(timeout: 20) { progress.exists && progress.label.contains("1 / 12") },
+            "阅读页一开始的进度不是第 1 张、共 12 张"
+        )
+        let episodeEnd = element("bika.reader.end", in: app)
+        var readerSwipes = 0
+        while !episodeEnd.exists, readerSwipes < 25 {
+            app.swipeUp()
+            readerSwipes += 1
+        }
+        XCTAssertTrue(episodeEnd.waitForExistence(timeout: 15), "阅读页滑到底没有到这一话的结尾，后面的图片没有取回来")
+        XCTAssertTrue(element("bika.reader.next", in: app).exists, "第一话看完之后应当有「下一话」的按钮")
+        print("HUBUI|新版哔咔|阅读页往下滑了 \(readerSwipes) 次到这一话的结尾，这时的进度：\(progress.exists ? progress.label : "读不到")")
+        XCTAssertFalse(progress.label.contains("　1 / 12"), "滑到结尾之后，进度还停在第 1 张")
+
+        // 从屏幕左边缘右滑：回到详情页，并且记住了看到哪里。
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: 3, dy: 0))
+        let target = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        edge.press(forDuration: 0.05, thenDragTo: target)
+        XCTAssertTrue(title.waitForExistence(timeout: 20), "在阅读页从屏幕左边缘右滑，没有回到详情页")
+        XCTAssertTrue(waitUntil(timeout: 20) { read.exists && read.label.contains("接着看") }, "回到详情页之后，没有记住看到哪里")
+        print("HUBUI|新版哔咔|从屏幕左边缘右滑回到了详情页，阅读按钮变成：\(read.label)")
+
+        // 「我的」：资料取到了，能打卡；浏览历史里有刚才那一本。
+        let profileTab = app.tabBars.buttons["我的"].exists ? app.tabBars.buttons["我的"] : app.buttons["我的"]
+        XCTAssertTrue(profileTab.waitForExistence(timeout: 15), "底部没有「我的」这个标签")
+        profileTab.tap()
+        let punch = element("bika.profile.punch", in: app)
+        XCTAssertTrue(punch.waitForExistence(timeout: 30), "「我的」页面上没有打卡按钮，资料没有取到")
+        punch.tap()
+        XCTAssertTrue(waitUntil(timeout: 20) { punch.label.contains("已打卡") }, "点打卡之后按钮没有变成已打卡")
+        settle(1)
+        report("新版哔咔的「我的」", app)
+        element("bika.profile.history", in: app).tap()
+        XCTAssertTrue(app.staticTexts["测试漫画 21"].waitForExistence(timeout: 20), "浏览历史里没有刚才看的那一本")
+        report("新版哔咔的浏览历史", app)
+
+        XCTAssertEqual(app.state, .runningForeground, "测试结束时 App 应该仍在前台运行")
+    }
+
     /// Pixiv 的颜色预设已经去掉：设置向导的「外观与画质」一步里只剩主题模式，没有「主题强调色」。
     ///
     /// 向导不需要登录，也不联网。这个测试停在向导的最后一步，不点「完成设置」，
@@ -605,10 +732,11 @@ final class HubUITests: XCTestCase {
             XCTAssertTrue(header.exists, "启动页上没有「\(title)」这个分区标题")
         }
 
-        let names = ["ehpanda", "pixiv", "pica"]
+        // 前三本是三个上游应用，第四本是新写的哔咔界面。
+        let names = ["ehpanda", "pixiv", "pica", "bika"]
         let frames = names.map { element("hub.module.\($0)", in: app).frame }
         let screen = app.frame
-        print("HUBUI|启动页|三本书的位置：" + zip(names, frames).map { "\($0) \(describe($1))" }.joined(separator: "；")
+        print("HUBUI|启动页|几本书的位置：" + zip(names, frames).map { "\($0) \(describe($1))" }.joined(separator: "；")
             + "；屏幕 \(describe(screen))")
 
         for (name, frame) in zip(names, frames) {
@@ -626,6 +754,8 @@ final class HubUITests: XCTestCase {
             }
         }
         if UIDevice.current.userInterfaceIdiom == .phone, screen.width < screen.height {
+            // 竖屏的 iPhone 一排放三本，第四本换到下一排（屏幕更宽的机型上也可能还在同一排，所以只要求它不在上面）。
+            XCTAssertGreaterThanOrEqual(frames[3].minY, frames[0].minY - 1, "第四本书不应该排到前三本的上面")
             XCTAssertEqual(frames[0].minY, frames[1].minY, accuracy: 1, "竖屏的 iPhone 上，三本书应当排在同一排")
             XCTAssertEqual(frames[1].minY, frames[2].minY, accuracy: 1, "竖屏的 iPhone 上，三本书应当排在同一排")
             XCTAssertLessThan(frames[0].minX, frames[1].minX, "三本书应当按 EhPanda、Pixiv、Pica 的顺序从左到右排")
@@ -714,6 +844,22 @@ final class HubUITests: XCTestCase {
     private func dragRightAcrossPager(in app: XCUIApplication, pointsFromLeft: CGFloat) {
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.3))
         pagerPoint(in: app, pointsFromLeft: pointsFromLeft).press(forDuration: 0.05, thenDragTo: end)
+    }
+
+    /// 系统问「要不要存储密码」的提示框：有的话点「以后」。它有时算在 App 里，有时算在系统桌面里，两边都找。
+    @MainActor
+    private func dismissSavePasswordPrompt(in app: XCUIApplication) {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for host in [app, springboard] {
+            for label in ["以后", "Not Now"] {
+                let button = host.buttons[label]
+                if button.exists {
+                    print("HUBUI|新版哔咔|系统问要不要存储密码，点了「\(label)」")
+                    button.tap()
+                    return
+                }
+            }
+        }
     }
 
     @MainActor
